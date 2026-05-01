@@ -5,12 +5,17 @@ require("dotenv").config();
 // DB connection
 require("./config/db");
 
+
+// Routes
+const complaintRoutes = require("./routes/complaintRoutes");
+
 const app = express();
 
 //  Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/api/complaints", complaintRoutes);
 
 //  Test route
 app.get("/", (req, res) => {
