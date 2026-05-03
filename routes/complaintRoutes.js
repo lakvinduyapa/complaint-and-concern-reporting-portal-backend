@@ -3,10 +3,14 @@ const router = express.Router();
 const db = require("../config/db");
 
 
-//  CREATE complaint
+// CREATE complaint
 router.post("/", (req, res) => {
+
+  // AUTO GENERATE CRN
+  const year = new Date().getFullYear();
+  const crn = `IAU-${year}-${Math.floor(100000 + Math.random() * 900000)}`;
+
   const {
-    crn,
     submission_type,
     reporter_category,
     complaint_category,
@@ -58,13 +62,13 @@ router.post("/", (req, res) => {
     ],
     (err, result) => {
       if (err) {
-        console.error(" DB ERROR:", err);
+        console.error("DB ERROR:", err);
         return res.status(500).json({ error: err.message });
       }
 
       res.status(201).json({
-        message: "Complaint saved successfully ",
-        id: result.insertId
+        message: "Complaint saved successfully",
+        crn: crn
       });
     }
   );
@@ -77,7 +81,7 @@ router.get("/", (req, res) => {
 
   db.query(sql, (err, results) => {
     if (err) {
-      console.error(" DB ERROR:", err);
+      console.error("DB ERROR:", err);
       return res.status(500).json({ error: err.message });
     }
 
@@ -99,7 +103,7 @@ router.get("/:id", (req, res) => {
     }
 
     if (results.length === 0) {
-      return res.status(404).json({ message: "Complaint not found ❌" });
+      return res.status(404).json({ message: "Complaint not found " });
     }
 
     res.json(results[0]);
@@ -115,21 +119,20 @@ router.delete("/:id", (req, res) => {
 
   db.query(sql, [id], (err, result) => {
     if (err) {
-      console.error(" DB ERROR:", err);
+      console.error("DB ERROR:", err);
       return res.status(500).json({ error: err.message });
     }
 
-    res.json({ message: "Complaint deleted successfully 🗑️" });
+    res.json({ message: "Complaint deleted successfully " });
   });
 });
 
 
-// UPDATE complaint
+//  UPDATE complaint
 router.put("/:id", (req, res) => {
   const { id } = req.params;
 
   const {
-    crn,
     submission_type,
     reporter_category,
     complaint_category,
@@ -146,7 +149,6 @@ router.put("/:id", (req, res) => {
 
   const sql = `
     UPDATE complaints SET
-      crn = ?,
       submission_type = ?,
       reporter_category = ?,
       complaint_category = ?,
@@ -165,7 +167,6 @@ router.put("/:id", (req, res) => {
   db.query(
     sql,
     [
-      crn,
       submission_type,
       reporter_category,
       complaint_category,
@@ -182,7 +183,7 @@ router.put("/:id", (req, res) => {
     ],
     (err, result) => {
       if (err) {
-        console.error("DB ERROR:", err);
+        console.error(" DB ERROR:", err);
         return res.status(500).json({ error: err.message });
       }
 
@@ -192,8 +193,5 @@ router.put("/:id", (req, res) => {
     }
   );
 });
-
-
-
 
 module.exports = router;
