@@ -1,21 +1,13 @@
-const mysql = require("mysql2");
+const mongoose = require("mongoose");
 
-// Create connection
-const db = mysql.createConnection({
-  host: "127.0.0.1",   // DO NOT use localhost
-  user: "root",
-  password: "",        // default XAMPP password
-  database: "iau_portal",
-  port: 3306
-});
-
-// Connect to MySQL
-db.connect((err) => {
-  if (err) {
-    console.error("DB connection failed:", err);
-  } else {
-    console.log("MySQL Connected Successfully!");
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("MongoDB Connected ");
+  } catch (error) {
+    console.error("MongoDB Error ", error);
+    process.exit(1);
   }
-});
+};
 
-module.exports = db;
+module.exports = connectDB;
