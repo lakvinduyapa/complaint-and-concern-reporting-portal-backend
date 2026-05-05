@@ -4,7 +4,7 @@ const Subject = require("../models/Subject");
 const Evidence = require("../models/Evidence");
 const Counter = require("../models/Counter");
 
-// 🔥 SAFE CRN GENERATOR (NO session)
+//  SAFE CRN GENERATOR (NO session)
 const generateCRN = async () => {
   const year = new Date().getFullYear();
 
@@ -20,16 +20,16 @@ const generateCRN = async () => {
 
 exports.createFullComplaint = async (req, res) => {
   try {
-    // 🔹 Parse incoming JSON
+    //  Parse incoming JSON
     const userData = JSON.parse(req.body.userData || "{}");
     const complaintData = JSON.parse(req.body.complaintData || "{}");
     const subjectData = JSON.parse(req.body.subjectData || "{}");
     const evidenceData = JSON.parse(req.body.evidenceData || "{}");
 
-    // 🔹 Files
+    //  Files
     const filePaths = req.files ? req.files.map(f => f.filename) : [];
 
-    // 🔹 Save related docs
+    //  Save related docs
     const savedUser = await User.create(userData);
     const savedSubject = await Subject.create(subjectData);
 
@@ -38,11 +38,11 @@ exports.createFullComplaint = async (req, res) => {
       files: filePaths,
     });
 
-    // 🔥 Generate unique CRN (outside any transaction)
+    //  Generate unique CRN (outside any transaction)
     const crn = await generateCRN();
     console.log("CRN GENERATED:", crn);
 
-    // 🔹 Save complaint
+    //  Save complaint
     const savedComplaint = await Complaint.create({
       ...complaintData,
       crn,
