@@ -1,30 +1,53 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
+const dotenv = require("dotenv");
 
-// DB connection
-require("./config/db");
+const connectDB = require("./config/db");
+
+// Routes
+const evidenceRoutes = require("./routes/evidenceRoutes");
+const complaintRoutes = require("./routes/complaintRoutes");
+
+dotenv.config();
 
 const app = express();
 
+// Connect MongoDB
+connectDB();
+
+//  FIXED CORS
+app.use(cors({
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
+}));
+
+// REMOVE THIS (CAUSE OF ERROR)
+// app.options("*", cors());
+
 //  Middleware
-app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+//  Serve uploaded files
+app.use("/uploads", express.static("uploads"));
+
+//  Routes
+app.use("/api/evidence", evidenceRoutes);
+app.use("/api/complaints", complaintRoutes);
 
 //  Test route
 app.get("/", (req, res) => {
-  res.send("Backend is running successfully...");
+  res.send("API Running");
 });
 
-//  Sample API test route
-app.get("/api/test", (req, res) => {
-  res.json({ message: "API working " });
+//  404 handler (SAFE WAY)
+app.use((req, res) => {
+  res.status(404).json({ message: "Route not found" });
 });
 
 //  Start server
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

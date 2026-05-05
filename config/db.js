@@ -1,18 +1,13 @@
-const mysql = require("mysql2");
+const mongoose = require("mongoose");
 
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "", 
-  database: "iau_portal" 
-});
-
-db.connect((err) => {
-  if (err) {
-    console.error("DB connection failed:", err.message);
-  } else {
-    console.log("MySQL Connected...");
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("MongoDB Connected ");
+  } catch (error) {
+    console.error("MongoDB Error ", error);
+    process.exit(1);
   }
-});
+};
 
-module.exports = db;
+module.exports = connectDB;
