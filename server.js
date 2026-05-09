@@ -6,7 +6,7 @@ const connectDB = require("./config/db");
 
 // Routes
 const evidenceRoutes = require("./routes/evidenceRoutes");
-const complaintRoutes = require("./routes/complaintRoutes");
+const complaintRoutes = require("./routes/public/complaintRoutes");
 
 dotenv.config();
 
