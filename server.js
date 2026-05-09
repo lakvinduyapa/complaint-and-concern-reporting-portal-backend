@@ -1,51 +1,100 @@
 const express = require("express");
-const cors = require("cors");
 const dotenv = require("dotenv");
+const cors = require("cors");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const rateLimit = require("express-rate-limit");
 
 const connectDB = require("./config/db");
 
-// Routes
-const evidenceRoutes = require("./routes/evidenceRoutes");
-const complaintRoutes = require("./routes/public/complaintRoutes");
-
+// Load environment variables
 dotenv.config();
+
+// Connect database
+connectDB();
 
 const app = express();
 
-// Connect MongoDB
-connectDB();
 
-//  FIXED CORS
+// Security Middleware
+
+
+app.use(helmet());
+
+
+// Rate Limiter
+
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  message: "Too many requests from this IP. Please try again later."
+});
+
+app.use(limiter);
+
+
+
+// CORS Configuration
+
+
 app.use(cors({
-  origin: "http://localhost:5173",
-  methods: ["GET", "POST", "PUT", "DELETE"],
+  origin: process.env.CLIENT_URL,
   credentials: true
 }));
 
-// REMOVE THIS (CAUSE OF ERROR)
-// app.options("*", cors());
 
-//  Middleware
+// Body Parser
+
+
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-//  Serve uploaded files
-app.use("/uploads", express.static("uploads"));
 
-//  Routes
-app.use("/api/evidence", evidenceRoutes);
-app.use("/api/complaints", complaintRoutes);
 
-//  Test route
+// Logger
+
+
+app.use(morgan("dev"));
+
+
+
+// Health Check Route
+
+
 app.get("/", (req, res) => {
-  res.send("API Running");
+  res.status(200).json({
+    success: true,
+    message: "SLTMobitel IAU Complaint Portal API Running"
+  });
 });
 
-//  404 handler (SAFE WAY)
+
+
+// API Routes
+
+
+// Example:
+// app.use("/api/public/complaints", complaintRoutes);
+
+
+
+
+// 404 Handler
+
+
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  res.status(404).json({
+    success: false,
+    message: "Route not found"
+  });
 });
 
-//  Start server
+
+
+// Server Start
+
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
