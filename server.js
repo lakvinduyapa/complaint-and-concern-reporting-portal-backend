@@ -11,6 +11,11 @@ const connectDB = require("./config/db");
 const complaintRoutes = require("./routes/public/complaintRoutes");
 const trackingRoutes = require("./routes/public/trackingRoutes");
 const evidenceRoutes = require("./routes/public/evidenceRoutes");
+const authRoutes = require("./routes/admin/authRoutes");
+const dashboardRoutes = require("./routes/admin/dashboardRoutes");
+const adminComplaintRoutes = require("./routes/admin/complaintRoutes");
+const statusRoutes = require("./routes/admin/statusRoutes");
+const auditRoutes = require("./routes/admin/auditRoutes");
 
 
 
@@ -104,6 +109,13 @@ app.get("/", (req, res) => {
 // ========================================
 // API Routes
 // ========================================
+
+// Admin Routes
+app.use("/api/admin/auth", authRoutes);
+app.use("/api/admin/dashboard", dashboardRoutes);
+app.use("/api/admin/complaints", adminComplaintRoutes);
+app.use("/api/admin/status", statusRoutes);
+app.use("/api/admin/audit", auditRoutes);
 
 // Public Complaint Routes
 app.use("/api/public/complaints", complaintRoutes);

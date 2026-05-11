@@ -122,6 +122,35 @@ const statusHistorySchema = new mongoose.Schema({
 }, { _id: false });
 
 
+// Investigation Notes Schema
+
+
+const investigationNoteSchema = new mongoose.Schema({
+  note: {
+    type: String,
+    required: true,
+    trim: true
+  },
+
+  addedBy: {
+    type: String,
+    required: true,
+    trim: true
+  },
+
+  isConfidential: {
+    type: Boolean,
+    default: true
+  },
+
+  addedAt: {
+    type: Date,
+    default: Date.now
+  }
+
+}, { _id: false });
+
+
 
 // Main Complaint Schema
 
@@ -209,6 +238,9 @@ const complaintSchema = new mongoose.Schema({
   // Status Timeline
   statusHistory: [statusHistorySchema],
 
+  // Investigation Notes (NEW)
+  investigationNotes: [investigationNoteSchema],
+
   // Escalation
   escalationRequired: {
     type: Boolean,
@@ -216,6 +248,15 @@ const complaintSchema = new mongoose.Schema({
   },
 
   escalationReason: {
+    type: String,
+    trim: true
+  },
+
+  escalationDate: {
+    type: Date
+  },
+
+  escalationApprovedBy: {
     type: String,
     trim: true
   },
@@ -236,6 +277,20 @@ const complaintSchema = new mongoose.Schema({
   submissionSource: {
     type: String,
     default: "web"
+  },
+
+  // Investigation Tracking (NEW)
+  assignedTo: {
+    type: String,
+    trim: true
+  },
+
+  investigationStartDate: {
+    type: Date
+  },
+
+  expectedCompletionDate: {
+    type: Date
   }
 
 }, {
