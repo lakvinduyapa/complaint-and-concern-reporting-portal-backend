@@ -2,8 +2,6 @@ const mongoose = require("mongoose");
 
 
 // Reporter Schema
-
-
 const reporterSchema = new mongoose.Schema({
   submissionType: {
     type: String,
@@ -53,8 +51,6 @@ const reporterSchema = new mongoose.Schema({
 
 
 // Subject Schema
-
-
 const subjectSchema = new mongoose.Schema({
   fullName: {
     type: String,
@@ -87,8 +83,6 @@ const subjectSchema = new mongoose.Schema({
 
 
 // Status History Schema
-
-
 const statusHistorySchema = new mongoose.Schema({
   status: {
     type: String,
@@ -123,8 +117,6 @@ const statusHistorySchema = new mongoose.Schema({
 
 
 // Investigation Notes Schema
-
-
 const investigationNoteSchema = new mongoose.Schema({
   note: {
     type: String,
@@ -153,8 +145,6 @@ const investigationNoteSchema = new mongoose.Schema({
 
 
 // Main Complaint Schema
-
-
 const complaintSchema = new mongoose.Schema({
 
   // CRN

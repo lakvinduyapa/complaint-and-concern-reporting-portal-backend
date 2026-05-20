@@ -1,8 +1,7 @@
 const Complaint = require("../../models/Complaint");
 
-// ========================================
+
 // Get All Complaints (Paginated + Filters)
-// ========================================
 
 const getComplaints = async (req, res) => {
   try {
@@ -60,9 +59,9 @@ const getComplaints = async (req, res) => {
   }
 };
 
-// ========================================
+
 // Get Complaint Details
-// ========================================
+
 
 const getComplaintById = async (req, res) => {
   try {

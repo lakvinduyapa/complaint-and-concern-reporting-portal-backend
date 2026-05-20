@@ -25,6 +25,13 @@ const trackComplaint = async (req, res) => {
 
     }
 
+    const normalizedStatusHistory = (complaint.statusHistory || []).map((entry) => ({
+      status: entry.status,
+      note: entry.note,
+      updatedBy: entry.updatedBy,
+      updatedAt: entry.updatedAt || (entry.status === "Submitted" ? complaint.createdAt : complaint.updatedAt)
+    }));
+
     // Success response
     res.status(200).json({
 
@@ -44,7 +51,7 @@ const trackComplaint = async (req, res) => {
 
         escalationRequired: complaint.escalationRequired,
 
-        statusHistory: complaint.statusHistory
+        statusHistory: normalizedStatusHistory
 
       }
 

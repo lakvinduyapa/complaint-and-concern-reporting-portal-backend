@@ -15,7 +15,7 @@ const seedAdminUser = async () => {
     const existingAdmin = await User.findOne({ email: "admin@iau.com" });
 
     if (existingAdmin) {
-      console.log("✅ Admin user already exists");
+      console.log(" Admin user already exists");
       process.exit(0);
     }
 
@@ -34,14 +34,14 @@ const seedAdminUser = async () => {
 
     await adminUser.save();
 
-    console.log("✅ Admin user created successfully");
-    console.log("📧 Email: admin@iau.com");
-    console.log("🔑 Password: Admin@123");
-    console.log("⚠️  Change this password after first login!");
+    console.log("Admin user created successfully");
+    console.log("Email: admin@iau.com");
+    console.log("Password: Admin@123");
+    console.log("Change this password after first login!");
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Seed Error:", error.message);
+    console.error(" Seed Error:", error.message);
     process.exit(1);
   }
 };

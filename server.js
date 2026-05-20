@@ -17,12 +17,6 @@ const adminComplaintRoutes = require("./routes/admin/complaintRoutes");
 const statusRoutes = require("./routes/admin/statusRoutes");
 const auditRoutes = require("./routes/admin/auditRoutes");
 
-
-
-
-
-
-
 // Load Environment Variables
 dotenv.config();
 
@@ -32,17 +26,12 @@ connectDB();
 const app = express();
 
 
-
 // Security Middleware
-
 
 app.use(helmet());
 
 
-
 // Rate Limiter
-
-
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minutes
   max: 100,
@@ -77,7 +66,6 @@ app.use(cors({
 
 // Body Parser Middleware
 
-
 app.use(express.json());
 
 app.use(express.urlencoded({
@@ -88,14 +76,11 @@ app.use(express.urlencoded({
 
 // Logger Middleware
 
-
 app.use(morgan("dev"));
 
 
 
 // Health Check Route
-
-
 app.get("/", (req, res) => {
 
   res.status(200).json({
@@ -106,9 +91,8 @@ app.get("/", (req, res) => {
 });
 
 
-// ========================================
+
 // API Routes
-// ========================================
 
 // Admin Routes
 app.use("/api/admin/auth", authRoutes);
@@ -122,9 +106,8 @@ app.use("/api/public/complaints", complaintRoutes);
 app.use("/api/public/tracking", trackingRoutes);
 app.use("/api/public/evidence", evidenceRoutes);
 
-// ========================================
+
 // 404 Handler
-// ========================================
 
 app.use((req, res) => {
 
@@ -136,9 +119,8 @@ app.use((req, res) => {
 });
 
 
-// ========================================
+
 // Global Error Handler
-// ========================================
 
 app.use((err, req, res, next) => {
 
@@ -151,10 +133,7 @@ app.use((err, req, res, next) => {
 
 });
 
-
-// ========================================
 // Start Server
-// ========================================
 
 const PORT = process.env.PORT || 5000;
 
