@@ -16,6 +16,7 @@ const dashboardRoutes = require("./routes/admin/dashboardRoutes");
 const adminComplaintRoutes = require("./routes/admin/complaintRoutes");
 const statusRoutes = require("./routes/admin/statusRoutes");
 const auditRoutes = require("./routes/admin/auditRoutes");
+const reportRoutes = require("./routes/admin/reportRoutes");
 
 // Load Environment Variables
 dotenv.config();
@@ -100,6 +101,7 @@ app.use("/api/admin/dashboard", dashboardRoutes);
 app.use("/api/admin/complaints", adminComplaintRoutes);
 app.use("/api/admin/status", statusRoutes);
 app.use("/api/admin/audit", auditRoutes);
+app.use("/api/admin/reports", reportRoutes);
 
 // Public Complaint Routes
 app.use("/api/public/complaints", complaintRoutes);
