@@ -45,18 +45,28 @@ const getReport = async (req, res) => {
       (c) => c.currentStatus === "Submitted"
     ).length;
 
+    const preliminaryReview = complaints.filter(
+      (c) => c.currentStatus === "Preliminary Review"
+    ).length;
+
     const underInvestigation = complaints.filter(
       (c) => c.currentStatus === "Under Investigation"
     ).length;
 
-    const resolved = complaints.filter(
-      (c) =>
-        c.currentStatus === "Resolved" ||
-        c.currentStatus === "Closed"
+    const awaitingEvidence = complaints.filter(
+      (c) => c.currentStatus === "Awaiting Evidence"
     ).length;
 
     const escalated = complaints.filter(
       (c) => c.currentStatus === "Escalated to CIABOC"
+    ).length;
+
+    const resolved = complaints.filter(
+      (c) => c.currentStatus === "Resolved"
+    ).length;
+
+    const closed = complaints.filter(
+      (c) => c.currentStatus === "Closed"
     ).length;
 
     const anonymousComplaints = complaints.filter(
@@ -83,16 +93,28 @@ const getReport = async (req, res) => {
         value: submitted,
       },
       {
+        name: "Preliminary Review",
+        value: preliminaryReview,
+      },
+      {
         name: "Under Investigation",
         value: underInvestigation,
+      },
+      {
+        name: "Awaiting Evidence",
+        value: awaitingEvidence,
+      },
+      {
+        name: "Escalated to CIABOC",
+        value: escalated,
       },
       {
         name: "Resolved",
         value: resolved,
       },
       {
-        name: "Escalated",
-        value: escalated,
+        name: "Closed",
+        value: closed,
       },
     ];
 
@@ -126,9 +148,12 @@ const getReport = async (req, res) => {
       summary: {
         totalComplaints,
         submitted,
+        preliminaryReview,
         underInvestigation,
-        resolved,
+        awaitingEvidence,
         escalated,
+        resolved,
+        closed,
         anonymousComplaints,
         namedComplaints,
         totalEvidence,
