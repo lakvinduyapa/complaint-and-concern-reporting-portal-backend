@@ -9,6 +9,24 @@ const reporterSchema = new mongoose.Schema({
     required: true
   },
 
+  reporterCategory: {
+    type: String,
+    enum: [
+      "SLT Employee",
+      "Mobitel Employee",
+      "SLTS Employee",
+      "Vendor",
+      "Supplier",
+      "Contractor",
+      "Customer",
+      "Shareholder",
+      "Investor",
+      "General Public",
+      "Other"
+    ],
+    required: true
+  },
+
   fullName: {
     type: String,
     trim: true
@@ -76,6 +94,11 @@ const subjectSchema = new mongoose.Schema({
   seniorManagementInvolved: {
     type: Boolean,
     default: false
+  },
+
+  seniorManagementPersonName: {
+    type: String,
+    trim: true
   }
 }, { _id: false });
 
@@ -166,6 +189,10 @@ const complaintSchema = new mongoose.Schema({
     type: Date
   },
 
+  incidentEndDate: {
+    type: Date
+  },
+
   incidentLocation: {
     type: String,
     trim: true
@@ -176,7 +203,8 @@ const complaintSchema = new mongoose.Schema({
     enum: [
       "One-time incident",
       "Repeated incident",
-      "Ongoing"
+      "Ongoing",
+      "Unknown"
     ]
   },
 
@@ -199,7 +227,12 @@ const complaintSchema = new mongoose.Schema({
     default: false
   },
 
-  previousReportDetails: {
+  previousReportedTo: {
+    type: String,
+    trim: true
+  },
+
+  previousReportOutcome: {
     type: String,
     trim: true
   },
@@ -237,6 +270,11 @@ const complaintSchema = new mongoose.Schema({
     default: false
   },
 
+  ciabocEscalation: {
+    type: Boolean,
+    default: false
+  },
+
   escalationReason: {
     type: String,
     trim: true
@@ -255,6 +293,11 @@ const complaintSchema = new mongoose.Schema({
   evidenceCount: {
     type: Number,
     default: 0
+  },
+
+  hasEvidence: {
+    type: Boolean,
+    default: false
   },
 
   // Confidentiality
