@@ -1,4 +1,9 @@
 const Complaint = require("../../models/Complaint");
+const ExcelJS = require("exceljs");
+
+// ======================================
+// GET REPORT DATA
+// ======================================
 
 const getReport = async (req, res) => {
   try {
@@ -164,6 +169,7 @@ const getReport = async (req, res) => {
 
       complaints,
     });
+
   } catch (error) {
     console.error("Report Error:", error);
 
@@ -174,6 +180,157 @@ const getReport = async (req, res) => {
   }
 };
 
+// ======================================
+// EXPORT EXCEL REPORT
+// ======================================
+
+const exportExcelReport = async (req, res) => {
+  try {
+    const { period } = req.query;
+
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (period) {
+      case "2days":
+        startDate.setDate(now.getDate() - 2);
+        break;
+
+      case "weekly":
+        startDate.setDate(now.getDate() - 7);
+        break;
+
+      case "2weekly":
+        startDate.setDate(now.getDate() - 14);
+        break;
+
+      case "monthly":
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    const complaints = await Complaint.find({
+      createdAt: {
+        $gte: startDate,
+        $lte: now,
+      },
+    }).sort({ createdAt: -1 });
+
+    // =========================
+    // Create Workbook
+    // =========================
+
+    const workbook = new ExcelJS.Workbook();
+
+    const worksheet = workbook.addWorksheet(
+      "Complaint Report"
+    );
+
+    // =========================
+    // Worksheet Columns
+    // =========================
+
+    worksheet.columns = [
+      {
+        header: "CRN",
+        key: "crn",
+        width: 25,
+      },
+      {
+        header: "Category",
+        key: "category",
+        width: 25,
+      },
+      {
+        header: "Status",
+        key: "status",
+        width: 30,
+      },
+      {
+        header: "Anonymous",
+        key: "anonymous",
+        width: 15,
+      },
+      {
+        header: "Evidence Count",
+        key: "evidenceCount",
+        width: 18,
+      },
+      {
+        header: "Created Date",
+        key: "createdAt",
+        width: 20,
+      },
+    ];
+
+    // =========================
+    // Add Rows
+    // =========================
+
+    complaints.forEach((complaint) => {
+      worksheet.addRow({
+        crn: complaint.crn,
+        category: complaint.category,
+        status: complaint.currentStatus,
+        anonymous: complaint.isAnonymous
+          ? "Yes"
+          : "No",
+        evidenceCount:
+          complaint.evidenceCount || 0,
+        createdAt: new Date(
+          complaint.createdAt
+        ).toLocaleDateString(),
+      });
+    });
+
+    // =========================
+    // Header Styling
+    // =========================
+
+    worksheet.getRow(1).font = {
+      bold: true,
+      size: 12,
+    };
+
+    // =========================
+    // Response Headers
+    // =========================
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=Complaint_Report_${period}.xlsx`
+    );
+
+    // =========================
+    // Write File
+    // =========================
+
+    await workbook.xlsx.write(res);
+
+    res.end();
+
+  } catch (error) {
+    console.error(
+      "Excel Export Error:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to export Excel report",
+    });
+  }
+};
+
 module.exports = {
   getReport,
+  exportExcelReport,
 };
