@@ -1,21 +1,21 @@
-const Complaint = require("../models/Complaint");
+const pool = require("../config/db");
 
 const generateCRN = async () => {
   try {
-
-    // Current Year
     const currentYear = new Date().getFullYear();
 
-    // Count Existing Complaints
-    const complaintCount = await Complaint.countDocuments();
+    // Count existing complaints in PostgreSQL
+    const result = await pool.query(`
+      SELECT COUNT(*) AS count
+      FROM complaints
+    `);
 
-    // Increment Count
+    const complaintCount = parseInt(result.rows[0].count, 10);
+
     const nextNumber = complaintCount + 1;
 
-    // Pad Number
     const paddedNumber = String(nextNumber).padStart(6, "0");
 
-    // Final CRN
     const crn = `IAU-${currentYear}-${paddedNumber}`;
 
     return crn;

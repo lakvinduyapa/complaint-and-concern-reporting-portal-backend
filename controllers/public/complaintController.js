@@ -1,128 +1,156 @@
-const Complaint = require("../../models/Complaint");
-
+const Complaint = require("../../queries/complaintQueries");
 const generateCRN = require("../../services/crnService");
 
-
-
-
-// Create New Complaint
-
-
+// ========================================
+// CREATE COMPLAINT (PERN VERSION)
+// ========================================
 const createComplaint = async (req, res) => {
-
   try {
-
-    // Generate CRN
     const crn = await generateCRN();
 
-    // Extract Request Data
     const {
       category,
       incidentDate,
+      incidentEndDate,
       incidentLocation,
       frequency,
       awarenessMethod,
       description,
       previouslyReported,
+      previousReportedTo,
+      previousReportOutcome,
       previousReportDetails,
       reporter,
-      subjects
+      subjects,
     } = req.body;
 
+    const hasSeniorManagementInvolved =
+      Array.isArray(subjects) &&
+      subjects.some(
+        (subject) =>
+          subject.seniorManagementInvolved === true ||
+          subject.seniorManagementInvolved === "true" ||
+          subject.seniorManagementInvolved === "Yes" ||
+          subject.seniorManagementInvolved === "yes"
+      );
 
-    // Create Complaint
-    const complaint = await Complaint.create({
+    const initialStatus = hasSeniorManagementInvolved
+      ? "Escalated to CIABOC"
+      : "Submitted";
 
+    const escalationReason = hasSeniorManagementInvolved
+      ? "Complaint involves senior management or IAU member"
+      : null;
+
+    // 1. INSERT INTO complaints TABLE
+    const complaint = await Complaint.createComplaint({
       crn,
-
       category,
-
-      incidentDate,
-
-      incidentLocation,
-
-      frequency,
-
-      awarenessMethod,
-
+      reporterFullName: reporter?.fullName || null,
+      incidentDate: incidentDate || null,
+      incidentEndDate: incidentEndDate || null,
+      incidentLocation: incidentLocation || null,
+      frequency: frequency || null,
+      awarenessMethod: awarenessMethod || null,
       description,
+      previouslyReported: Boolean(previouslyReported),
+      previousReportedTo: previousReportedTo || null,
+      previousReportOutcome:
+        previousReportOutcome || previousReportDetails || null,
 
-      previouslyReported,
+      currentStatus: initialStatus,
+      escalationRequired: hasSeniorManagementInvolved,
+      ciabocEscalation: hasSeniorManagementInvolved,
+      escalationReason,
+      escalationDate: hasSeniorManagementInvolved ? new Date() : null,
+      escalationApprovedBy: null,
 
-      previousReportDetails,
-
-      reporter,
-
-      subjects,
-
-      isAnonymous:
-        reporter?.submissionType === "anonymous",
-
-      // Initial Status
-      currentStatus: "Submitted",
-
-      // Status Timeline
-      statusHistory: [
-        {
-          status: "Submitted",
-          note: "Complaint submitted successfully",
-          updatedBy: "System"
-        }
-      ]
-
+      evidenceCount: 0,
+      hasEvidence: false,
+      isAnonymous: reporter?.submissionType === "anonymous",
+      submissionSource: "web",
+      assignedTo: null,
+      investigationStartDate: null,
+      expectedCompletionDate: null,
     });
 
+    const complaintId = complaint.id;
 
-    // Success Response
-    res.status(201).json({
+    // 2. INSERT REPORTER TABLE
+    if (reporter) {
+      await Complaint.createReporter({
+        complaint_id: complaintId,
+        submission_type: reporter.submissionType || "named",
+        reporter_category: reporter.reporterCategory || null,
+        full_name: reporter.fullName || null,
+        employee_id: reporter.employeeId || null,
+        department: reporter.department || null,
+        designation: reporter.designation || null,
+        email: reporter.email || null,
+        phone: reporter.phone || null,
+        preferred_contact_method: reporter.preferredContactMethod || null,
+      });
+    }
 
-      success: true,
-
-      message: "Complaint submitted successfully",
-
-      data: {
-        complaintId: complaint._id,
-        crn: complaint.crn,
-        status: complaint.currentStatus,
-        submittedAt: complaint.createdAt
+    // 3. INSERT SUBJECTS TABLE
+    if (Array.isArray(subjects) && subjects.length > 0) {
+      for (const subject of subjects) {
+        await Complaint.createSubject({
+          complaint_id: complaintId,
+          full_name: subject.fullName || null,
+          designation: subject.designation || null,
+          organisation: subject.organisation || null,
+          relationship: subject.relationship || null,
+          senior_management_involved:
+            subject.seniorManagementInvolved === true ||
+            subject.seniorManagementInvolved === "true" ||
+            subject.seniorManagementInvolved === "Yes" ||
+            subject.seniorManagementInvolved === "yes",
+          senior_management_person_name:
+            subject.seniorManagementPersonName || null,
+        });
       }
+    }
 
+    // 4. INSERT STATUS HISTORY TABLE
+    await Complaint.addStatusHistory({
+      complaint_id: complaintId,
+      status: initialStatus,
+      note: hasSeniorManagementInvolved
+        ? "Complaint automatically escalated to CIABOC because it involves senior management or IAU member"
+        : "Complaint submitted successfully",
+      updated_by: null,
     });
 
+    return res.status(201).json({
+      success: true,
+      message: hasSeniorManagementInvolved
+        ? "Complaint submitted and automatically escalated to CIABOC"
+        : "Complaint submitted successfully",
+      data: {
+        complaintId,
+        crn,
+        status: initialStatus,
+        ciabocEscalation: hasSeniorManagementInvolved,
+        submittedAt: complaint.created_at,
+      },
+    });
   } catch (error) {
-
-    console.error("Create Complaint Error:", error.message);
-
-    if (error.name === "ValidationError") {
-      const details = Object.values(error.errors).map((err) => err.message);
-
-      return res.status(400).json({
-        success: false,
-        message: details[0] || "Validation failed",
-        details
-      });
-    }
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Duplicate complaint reference generated. Please retry submission."
-      });
-    }
-
-    res.status(500).json({
-
-      success: false,
-
-      message: "Failed to submit complaint"
-
+    console.error("Create Complaint Error:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
     });
 
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit complaint",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
   }
-
 };
 
-
 module.exports = {
-  createComplaint
+  createComplaint,
 };

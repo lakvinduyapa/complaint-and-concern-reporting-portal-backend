@@ -1,18 +1,14 @@
-const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const dotenv = require("dotenv");
 
 dotenv.config();
 
-const User = require("./models/User");
-const connectDB = require("./config/db");
+const User = require("./queries/userQueries");
 
 const seedAdminUser = async () => {
   try {
-    await connectDB();
-
     // Check if admin already exists
-    const existingAdmin = await User.findOne({ email: "admin@iau.com" });
+    const existingAdmin = await User.getUserByEmail("admin@iau.com");
 
     if (existingAdmin) {
       console.log(" Admin user already exists");
@@ -23,16 +19,13 @@ const seedAdminUser = async () => {
     const hashedPassword = await bcrypt.hash("Admin@123", 10);
 
     // Create admin user
-    const adminUser = new User({
+    await User.createUser({
       fullName: "Admin User",
       email: "admin@iau.com",
       password: hashedPassword,
       role: "Admin",
-      department: "Internal Audit Unit",
-      isActive: true
+      department: "Internal Audit Unit"
     });
-
-    await adminUser.save();
 
     console.log("Admin user created successfully");
     console.log("Email: admin@iau.com");

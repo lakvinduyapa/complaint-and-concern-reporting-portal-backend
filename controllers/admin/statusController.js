@@ -1,5 +1,5 @@
-const Complaint = require("../../models/Complaint");
-const AuditLog = require("../../models/AuditLog");
+const Complaint = require("../../queries/complaintQueries");
+const AuditLog = require("../../queries/auditQueries");
 
 const VALID_STATUSES = [
   "Submitted",
@@ -8,39 +8,35 @@ const VALID_STATUSES = [
   "Awaiting Evidence",
   "Escalated to CIABOC",
   "Resolved",
-  "Closed"
+  "Closed",
 ];
 
 // ========================================
 // Get Status Options
 // ========================================
-
 const getStatusOptions = async (req, res) => {
   return res.status(200).json({
     success: true,
-    data: VALID_STATUSES
+    data: VALID_STATUSES,
   });
 };
 
 // ========================================
-// Check if complaint should auto-escalate
+// Auto Escalation Logic
 // ========================================
-
 const shouldAutoEscalate = (complaint) => {
-  // Auto-escalate if senior management involved
-  if (complaint.subjects?.some(s => s.seniorManagementInvolved)) {
-    return {
-      shouldEscalate: true,
-      reason: "Senior management personnel involved in complaint"
-    };
-  }
+  const escalationCategories = [
+    "bribery",
+    "corruption",
+    "fraud",
+    "financial misconduct",
+    "procurement irregularity",
+  ];
 
-  // Auto-escalate if category is bribery or high-level corruption
-  const escalationCategories = ["bribery", "high-level corruption", "executive misconduct"];
-  if (escalationCategories.includes(complaint.category?.toLowerCase())) {
+  if (escalationCategories.includes(String(complaint.category || "").toLowerCase())) {
     return {
       shouldEscalate: true,
-      reason: `Category "${complaint.category}" requires automatic escalation`
+      reason: `Category "${complaint.category}" requires automatic escalation`,
     };
   }
 
@@ -48,117 +44,127 @@ const shouldAutoEscalate = (complaint) => {
 };
 
 // ========================================
-// Update Complaint Status
+// UPDATE STATUS
 // ========================================
-
 const updateComplaintStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      status,
-      note,
-      escalate = false,
-      escalationReason = ""
-    } = req.body;
+    const { status, note, escalate = false, escalationReason = "" } = req.body;
 
-    if (!status || !VALID_STATUSES.includes(status)) {
+    const adminUserId = req.user?.userId || null;
+
+    if (!VALID_STATUSES.includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status value"
+        message: "Invalid status value",
       });
     }
 
-    const complaint = await Complaint.findById(id);
+    const complaint = await Complaint.getById(id);
 
     if (!complaint) {
       return res.status(404).json({
         success: false,
-        message: "Complaint not found"
+        message: "Complaint not found",
       });
     }
 
-    const previousStatus = complaint.currentStatus;
-    complaint.currentStatus = status;
+    const previousStatus = complaint.current_status;
+    let finalStatus = status;
 
-    // Check auto-escalation rules
     const autoEscalateCheck = shouldAutoEscalate(complaint);
 
-    // Handle escalation
-    if (escalate || status === "Escalated to CIABOC" || autoEscalateCheck.shouldEscalate) {
-      complaint.escalationRequired = true;
-      complaint.escalationDate = new Date();
-      complaint.escalationApprovedBy = req.user?.email || "Admin";
+    let escalationFlag = false;
+    let escalationText = null;
 
-      if (escalationReason) {
-        complaint.escalationReason = escalationReason;
-      } else if (autoEscalateCheck.shouldEscalate) {
-        complaint.escalationReason = autoEscalateCheck.reason;
-      } else {
-        complaint.escalationReason = note || "Escalated by admin";
-      }
+    if (
+      escalate ||
+      status === "Escalated to CIABOC" ||
+      autoEscalateCheck.shouldEscalate
+    ) {
+      escalationFlag = true;
+      escalationText =
+        escalationReason ||
+        autoEscalateCheck.reason ||
+        note ||
+        "Escalated by admin";
 
-      if (status !== "Escalated to CIABOC") {
-        complaint.currentStatus = "Escalated to CIABOC";
-      }
+      finalStatus = "Escalated to CIABOC";
     }
 
-    // Add to status history
-    complaint.statusHistory.push({
-      status: complaint.currentStatus,
-      note: note || "Status updated by admin",
-      updatedBy: req.user?.email || "Admin"
+    await Complaint.updateStatus(id, {
+      current_status: finalStatus,
+      escalation_required: escalationFlag,
+      ciaboc_escalation: escalationFlag,
+      escalation_reason: escalationText,
+      escalation_date: escalationFlag ? new Date() : null,
+      escalation_approved_by: escalationFlag ? adminUserId : null,
+      updated_at: new Date(),
     });
 
-    // Add investigation note if provided
+    await Complaint.addStatusHistory({
+      complaint_id: id,
+      status: finalStatus,
+      note: note || "Status updated by admin",
+      updated_by: adminUserId,
+    });
+
     if (note) {
-      complaint.investigationNotes.push({
-        note: note,
-        addedBy: req.user?.email || "Admin",
-        isConfidential: true,
-        addedAt: new Date()
+      await Complaint.addInvestigationNote({
+        complaint_id: id,
+        note,
+        added_by: adminUserId,
+        is_confidential: true,
       });
     }
 
-    // Track investigation timeline
-    if (status === "Under Investigation" && !complaint.investigationStartDate) {
-      complaint.investigationStartDate = new Date();
-      complaint.expectedCompletionDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
+    if (status === "Under Investigation") {
+      await Complaint.updateInvestigationTimeline(id, {
+        investigation_start_date: new Date(),
+        expected_completion_date: new Date(
+          Date.now() + 14 * 24 * 60 * 60 * 1000
+        ),
+      });
     }
 
-    await complaint.save();
-
-    // Create audit log
-    const actionType = complaint.currentStatus === "Escalated to CIABOC" ? "ESCALATE_CASE" : "UPDATE_STATUS";
-
     await AuditLog.create({
-      complaintId: complaint._id,
-      userId: req.user?.userId,
-      action: actionType,
-      details: `Status changed from ${previousStatus} to ${complaint.currentStatus}. Note: ${note || "No note provided"}`,
+      complaintId: id,
+      userId: adminUserId,
+      action:
+        finalStatus === "Escalated to CIABOC"
+          ? "ESCALATE_CASE"
+          : "UPDATE_STATUS",
+      details: `Status changed from ${previousStatus} to ${finalStatus}. Note: ${
+        note || "No note provided"
+      }`,
       ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] || ""
+      userAgent: req.headers["user-agent"] || "",
     });
 
     return res.status(200).json({
       success: true,
       message: "Complaint status updated successfully",
       data: {
-        complaintId: complaint._id,
-        crn: complaint.crn,
+        complaintId: id,
         previousStatus,
-        currentStatus: complaint.currentStatus,
-        escalationRequired: complaint.escalationRequired,
-        escalationReason: complaint.escalationReason,
+        currentStatus: finalStatus,
+        escalationRequired: escalationFlag,
+        escalationReason: escalationText,
         autoEscalated: autoEscalateCheck.shouldEscalate,
-        latestStatus: complaint.statusHistory[complaint.statusHistory.length - 1],
-        latestNote: complaint.investigationNotes[complaint.investigationNotes.length - 1] || null
-      }
+      },
     });
   } catch (error) {
-    console.error("Update Complaint Status Error:", error.message);
+    console.error("Update Status Error:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
+    });
+
     return res.status(500).json({
       success: false,
-      message: "Failed to update complaint status"
+      message: "Failed to update complaint status",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
     });
   }
 };
@@ -166,61 +172,61 @@ const updateComplaintStatus = async (req, res) => {
 // ========================================
 // Add Investigation Note
 // ========================================
-
 const addInvestigationNote = async (req, res) => {
   try {
     const { id } = req.params;
     const { note, isConfidential = true } = req.body;
 
-    if (!note || note.trim().length === 0) {
+    const adminUserId = req.user?.userId || null;
+
+    if (!note?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Note cannot be empty"
+        message: "Note cannot be empty",
       });
     }
 
-    const complaint = await Complaint.findById(id);
+    const complaint = await Complaint.getById(id);
 
     if (!complaint) {
       return res.status(404).json({
         success: false,
-        message: "Complaint not found"
+        message: "Complaint not found",
       });
     }
 
-    complaint.investigationNotes.push({
+    await Complaint.addInvestigationNote({
+      complaint_id: id,
       note: note.trim(),
-      addedBy: req.user?.email || "Admin",
-      isConfidential: isConfidential,
-      addedAt: new Date()
+      added_by: adminUserId,
+      is_confidential: isConfidential,
     });
 
-    await complaint.save();
-
-    // Audit log
     await AuditLog.create({
-      complaintId: complaint._id,
-      userId: req.user?.userId,
-      action: "UPDATE_STATUS",
-      details: `Investigation note added: ${note.substring(0, 100)}...`,
+      complaintId: id,
+      userId: adminUserId,
+      action: "ADD_INVESTIGATION_NOTE",
+      details: "Investigation note added",
       ipAddress: req.ip,
-      userAgent: req.headers["user-agent"] || ""
+      userAgent: req.headers["user-agent"] || "",
     });
 
     return res.status(200).json({
       success: true,
       message: "Investigation note added successfully",
-      data: {
-        crn: complaint.crn,
-        noteCount: complaint.investigationNotes.length,
-        latestNote: complaint.investigationNotes[complaint.investigationNotes.length - 1]
-      }
     });
   } catch (error) {
-    console.error("Add Investigation Note Error:", error.message);
+    console.error("Add Note Error:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
+    });
+
     return res.status(500).json({
       success: false,
-      message: "Failed to add investigation note"
+      message: "Failed to add note",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
     });
   }
 };
@@ -228,33 +234,31 @@ const addInvestigationNote = async (req, res) => {
 // ========================================
 // Get Investigation Notes
 // ========================================
-
 const getInvestigationNotes = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const complaint = await Complaint.findById(id).select("crn investigationNotes");
-
-    if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found"
-      });
-    }
+    const notes = await Complaint.getInvestigationNotes(id);
 
     return res.status(200).json({
       success: true,
       data: {
-        crn: complaint.crn,
-        notes: complaint.investigationNotes,
-        totalNotes: complaint.investigationNotes.length
-      }
+        complaintId: id,
+        notes,
+      },
     });
   } catch (error) {
-    console.error("Get Investigation Notes Error:", error.message);
+    console.error("Get Notes Error:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
+    });
+
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch investigation notes"
+      message: "Failed to fetch notes",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
     });
   }
 };
@@ -263,5 +267,5 @@ module.exports = {
   getStatusOptions,
   updateComplaintStatus,
   addInvestigationNote,
-  getInvestigationNotes
+  getInvestigationNotes,
 };

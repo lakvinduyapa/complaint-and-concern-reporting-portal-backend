@@ -1,78 +1,69 @@
-const Complaint = require("../../models/Complaint");
-
+const Complaint = require("../../queries/complaintQueries");
 
 // ========================================
-// Track Complaint By CRN
+// TRACK COMPLAINT BY CRN (PERN VERSION)
 // ========================================
-
 const trackComplaint = async (req, res) => {
-
   try {
-
-    // Get CRN from URL params
     const { crn } = req.params;
 
-    // Find complaint using CRN
-    const complaint = await Complaint.findOne({ crn });
-
-    // Complaint not found
-    if (!complaint) {
-
-      return res.status(404).json({
+    if (!crn) {
+      return res.status(400).json({
         success: false,
-        message: "Complaint not found"
+        message: "CRN is required",
       });
-
     }
 
-    const normalizedStatusHistory = (complaint.statusHistory || []).map((entry) => ({
+    // 1. GET COMPLAINT FROM POSTGRESQL
+    const complaint = await Complaint.getByCRN(crn);
+
+    if (!complaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found",
+      });
+    }
+
+    // 2. GET STATUS HISTORY
+    const statusHistory = await Complaint.getStatusHistory(complaint.id);
+
+    // 3. NORMALIZE RESPONSE
+    const normalizedStatusHistory = statusHistory.map((entry) => ({
       status: entry.status,
       note: entry.note,
-      updatedBy: entry.updatedBy,
-      updatedAt: entry.updatedAt || (entry.status === "Submitted" ? complaint.createdAt : complaint.updatedAt)
+      updatedBy: entry.updated_by,
+      updatedAt: entry.created_at,
     }));
 
-    // Success response
-    res.status(200).json({
-
+    // 4. RESPONSE
+    return res.status(200).json({
       success: true,
-
       data: {
-
-        complaintId: complaint._id,
-
+        complaintId: complaint.id,
         crn: complaint.crn,
-
         category: complaint.category,
-
-        currentStatus: complaint.currentStatus,
-
-        submittedAt: complaint.createdAt,
-
-        escalationRequired: complaint.escalationRequired,
-
-        statusHistory: normalizedStatusHistory
-
-      }
-
+        currentStatus: complaint.current_status,
+        submittedAt: complaint.created_at,
+        escalationRequired: complaint.escalation_required,
+        statusHistory: normalizedStatusHistory,
+      },
     });
-
   } catch (error) {
-
-    console.error("Tracking Error:", error.message);
-
-    res.status(500).json({
-
-      success: false,
-      message: "Failed to track complaint"
-
+    console.error("Tracking Error:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
     });
 
+    return res.status(500).json({
+      success: false,
+      message: "Failed to track complaint",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
   }
-
 };
 
-
 module.exports = {
-  trackComplaint
+  trackComplaint,
 };

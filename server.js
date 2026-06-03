@@ -5,142 +5,125 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 
-const connectDB = require("./config/db");
+// DB connection
+const { connectDB } = require("./config/db");
 
-// Routes
-const complaintRoutes = require("./routes/public/complaintRoutes");
-const trackingRoutes = require("./routes/public/trackingRoutes");
-const evidenceRoutes = require("./routes/public/evidenceRoutes");
-const authRoutes = require("./routes/admin/authRoutes");
-const dashboardRoutes = require("./routes/admin/dashboardRoutes");
-const adminComplaintRoutes = require("./routes/admin/complaintRoutes");
-const statusRoutes = require("./routes/admin/statusRoutes");
-const auditRoutes = require("./routes/admin/auditRoutes");
-const reportRoutes = require("./routes/admin/reportRoutes");
-
-// Load Environment Variables
 dotenv.config();
-
-// Connect MongoDB
-connectDB();
 
 const app = express();
 
+// ========================================
+// DATABASE CONNECTION
+// ========================================
+connectDB()
+  .then(() => {
+    const PORT = process.env.PORT || 5000;
 
-// Security Middleware
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  });
 
+// ========================================
+// SECURITY MIDDLEWARE
+// ========================================
 app.use(helmet());
 
-
-// Rate Limiter
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 Minutes
+  windowMs: 15 * 60 * 1000,
   max: 100,
-  message: "Too many requests from this IP. Please try again later."
+  message: "Too many requests from this IP. Please try again later.",
 });
 
 app.use(limiter);
 
-
-
-// CORS Configuration
+// ========================================
+// CORS CONFIG
+// ========================================
 const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((origin) => origin.trim())
+  ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
   : ["http://localhost:5173", "http://127.0.0.1:5173"];
 
-app.use(cors({
-  origin(origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-    return callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true
-}));
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
-
-
-// Body Parser Middleware
-
+// ========================================
+// BODY PARSER
+// ========================================
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use(express.urlencoded({
-  extended: true
-}));
-
-
-
-// Logger Middleware
-
+// ========================================
+// LOGGER
+// ========================================
 app.use(morgan("dev"));
 
+// ========================================
+// STATIC FILES - EVIDENCE UPLOADS
+// ========================================
+app.use("/uploads", express.static("uploads"));
 
-
-// Health Check Route
+// ========================================
+// HEALTH CHECK
+// ========================================
 app.get("/", (req, res) => {
-
   res.status(200).json({
     success: true,
-    message: "SLTMobitel IAU Complaint Portal API Running"
+    message: "Complaint Portal API Running (PERN Version)",
   });
-
 });
 
+// ========================================
+// ROUTES
+// ========================================
 
+// Admin
+app.use("/api/admin/auth", require("./routes/admin/authRoutes"));
+app.use("/api/admin/dashboard", require("./routes/admin/dashboardRoutes"));
+app.use("/api/admin/complaints", require("./routes/admin/complaintRoutes"));
+app.use("/api/admin/status", require("./routes/admin/statusRoutes"));
+app.use("/api/admin/audit", require("./routes/admin/auditRoutes"));
+app.use("/api/admin/reports", require("./routes/admin/reportRoutes"));
 
-// API Routes
+// Public
+app.use("/api/public/complaints", require("./routes/public/complaintRoutes"));
+app.use("/api/public/tracking", require("./routes/public/trackingRoutes"));
+app.use("/api/public/evidence", require("./routes/public/evidenceRoutes"));
 
-// Admin Routes
-app.use("/api/admin/auth", authRoutes);
-app.use("/api/admin/dashboard", dashboardRoutes);
-app.use("/api/admin/complaints", adminComplaintRoutes);
-app.use("/api/admin/status", statusRoutes);
-app.use("/api/admin/audit", auditRoutes);
-app.use("/api/admin/reports", reportRoutes);
-
-// Public Complaint Routes
-app.use("/api/public/complaints", complaintRoutes);
-app.use("/api/public/tracking", trackingRoutes);
-app.use("/api/public/evidence", evidenceRoutes);
-
-
-// 404 Handler
-
+// ========================================
+// 404 HANDLER
+// ========================================
 app.use((req, res) => {
-
   res.status(404).json({
     success: false,
-    message: "Route not found"
+    message: "Route not found",
   });
-
 });
 
-
-
-// Global Error Handler
-
+// ========================================
+// GLOBAL ERROR HANDLER
+// ========================================
 app.use((err, req, res, next) => {
-
-  console.error(err.stack);
+  console.error("SERVER ERROR:", err);
 
   res.status(500).json({
     success: false,
-    message: "Internal Server Error"
+    message: "Internal Server Error",
   });
-
-});
-
-// Start Server
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-
-  console.log(` Server running on port ${PORT}`);
-
 });

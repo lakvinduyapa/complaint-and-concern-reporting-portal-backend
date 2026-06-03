@@ -5,23 +5,21 @@ const router = express.Router();
 const upload = require("../../config/multer");
 
 const {
-  uploadEvidence
+  uploadEvidence,
+  getEvidenceByComplaintId,
 } = require("../../controllers/public/evidenceController");
 
-
-// ========================================
-// Upload Evidence Route
-// ========================================
-
+// Upload Multiple Evidence Files
 router.post(
-
   "/upload",
-
-  upload.single("file"),
-
+  upload.array("files", 5),
   uploadEvidence
-
 );
 
+// Get Evidence By Complaint ID
+router.get(
+  "/complaint/:complaintId",
+  getEvidenceByComplaintId
+);
 
 module.exports = router;

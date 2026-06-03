@@ -1,6 +1,10 @@
-const AuditLog = require('../../models/AuditLog');
+const AuditLog = require("../../queries/auditQueries.js");
+const User = require("../../queries/userQueries.js");
+const Complaint = require("../../queries/complaintQueries.js");
 
-// Get audit logs with filtering and pagination
+// ===============================
+// GET AUDIT LOGS (FILTER + PAGINATION)
+// ===============================
 const getAuditLogs = async (req, res) => {
   try {
     const {
@@ -10,115 +14,166 @@ const getAuditLogs = async (req, res) => {
       fromDate,
       toDate,
       page = 1,
-      limit = 10
+      limit = 10,
     } = req.query;
 
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    const offset = (pageNumber - 1) * limitNumber;
 
-    // Build filter object
-    const filter = {};
+    let logs = await AuditLog.getAllAuditLogs();
 
     if (complaintId) {
-      filter.complaintId = complaintId;
+      logs = logs.filter((log) => String(log.complaint_id) === String(complaintId));
     }
 
     if (action) {
-      filter.action = action;
+      logs = logs.filter((log) => log.action === action);
     }
 
     if (userId) {
-      filter.userId = userId;
+      logs = logs.filter((log) => String(log.user_id) === String(userId));
     }
 
-    // Date range filter
-    if (fromDate || toDate) {
-      filter.createdAt = {};
-      if (fromDate) {
-        filter.createdAt.$gte = new Date(fromDate);
-      }
-      if (toDate) {
-        // Add 1 day to toDate to include the entire day
-        const endDate = new Date(toDate);
-        endDate.setDate(endDate.getDate() + 1);
-        filter.createdAt.$lt = endDate;
-      }
+    if (fromDate) {
+      logs = logs.filter(
+        (log) => new Date(log.performed_at) >= new Date(fromDate)
+      );
     }
 
-    // Get total count
-    const total = await AuditLog.countDocuments(filter);
+    if (toDate) {
+      const endDate = new Date(toDate);
+      endDate.setDate(endDate.getDate() + 1);
 
-    // Get paginated results
-    const logs = await AuditLog.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
+      logs = logs.filter((log) => new Date(log.performed_at) < endDate);
+    }
 
-    res.json({
-      logs,
+    const total = logs.length;
+    const paginatedLogs = logs.slice(offset, offset + limitNumber);
+
+    return res.status(200).json({
+      success: true,
+      logs: paginatedLogs,
       pagination: {
-        page: pageNum,
-        limit: limitNum,
+        page: pageNumber,
+        limit: limitNumber,
         total,
-        totalPages: Math.ceil(total / limitNum)
-      }
+        totalPages: Math.ceil(total / limitNumber),
+      },
     });
   } catch (error) {
-    console.error('Error fetching audit logs:', error);
-    res.status(500).json({ message: 'Failed to fetch audit logs' });
+    console.error("Error fetching audit logs:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch audit logs",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
   }
 };
 
-// Get unique actions for filter dropdown
+// ===============================
+// GET UNIQUE ACTIONS
+// ===============================
 const getActions = async (req, res) => {
   try {
-    const actions = await AuditLog.distinct('action');
-    res.json(actions.sort());
+    const logs = await AuditLog.getAllAuditLogs();
+    const actions = [...new Set(logs.map((log) => log.action).filter(Boolean))];
+
+    return res.status(200).json({
+      success: true,
+      actions: actions.sort(),
+    });
   } catch (error) {
-    console.error('Error fetching actions:', error);
-    res.status(500).json({ message: 'Failed to fetch actions' });
+    console.error("Error fetching audit actions:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch actions",
+    });
   }
 };
 
-// Get unique users for filter dropdown
+// ===============================
+// GET USERS FOR FILTER
+// ===============================
 const getUsers = async (req, res) => {
   try {
-    const logs = await AuditLog.find()
-      .select('userId')
-      .distinct('userId')
-      .lean();
+    const logs = await AuditLog.getAllAuditLogs();
 
-    // Fetch user names from User model
-    const User = require('../../models/User');
-    const users = await User.find({ _id: { $in: logs } })
-      .select('_id fullName email')
-      .lean();
+    const userIds = [
+      ...new Set(logs.map((log) => log.user_id).filter((id) => id !== null)),
+    ];
 
-    res.json(users.map(u => ({
-      _id: u._id,
-      fullName: u.fullName,
-      email: u.email
-    })));
+    const users = [];
+
+    for (const id of userIds) {
+      const user = await User.getUserById(id);
+
+      if (user) {
+        users.push({
+          id: user.id,
+          fullName: user.full_name,
+          email: user.email,
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      users,
+    });
   } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ message: 'Failed to fetch users' });
+    console.error("Error fetching audit users:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
   }
 };
 
-// Get unique complaints for filter dropdown
+// ===============================
+// GET COMPLAINT IDS
+// ===============================
 const getComplaintIds = async (req, res) => {
   try {
-    const Complaint = require('../../models/Complaint');
-    const complaints = await Complaint.find()
-      .select('_id crn category')
-      .lean();
+    const complaints = await Complaint.getAllComplaints();
 
-    res.json(complaints);
+    const result = complaints.map((complaint) => ({
+      id: complaint.id,
+      crn: complaint.crn,
+      category: complaint.category,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      complaints: result,
+    });
   } catch (error) {
-    console.error('Error fetching complaint IDs:', error);
-    res.status(500).json({ message: 'Failed to fetch complaint IDs' });
+    console.error("Error fetching complaint IDs:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch complaints",
+    });
   }
 };
 
@@ -126,5 +181,5 @@ module.exports = {
   getAuditLogs,
   getActions,
   getUsers,
-  getComplaintIds
+  getComplaintIds,
 };
