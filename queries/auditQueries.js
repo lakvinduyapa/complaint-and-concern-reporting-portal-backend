@@ -41,13 +41,35 @@ const createAuditLog = async (data) => {
 // GET ALL AUDIT LOGS
 // ===============================
 const getAllAuditLogs = async () => {
-  const result = await pool.query(
-    `SELECT * FROM audit_logs ORDER BY performed_at DESC`
-  );
+  const result = await pool.query(`
+    SELECT
+      al.id,
+      al.complaint_id,
+      al.user_id,
+      al.action,
+      al.details,
+      al.ip_address,
+      al.user_agent,
+      al.performed_at,
+
+      u.full_name,
+      u.role,
+
+      c.crn
+
+    FROM audit_logs al
+
+    LEFT JOIN users u
+      ON al.user_id = u.id
+
+    LEFT JOIN complaints c
+      ON al.complaint_id = c.id
+
+    ORDER BY al.performed_at DESC
+  `);
 
   return result.rows;
 };
-
 // ===============================
 // GET AUDIT LOG BY ID
 // ===============================

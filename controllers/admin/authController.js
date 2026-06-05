@@ -2,7 +2,9 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
+
 const User = require("../../queries/userQueries.js");
+const AuditLog = require("../../queries/auditQueries.js");
 
 const authDebugLogPath = path.join(__dirname, "..", "..", "auth-debug.log");
 
@@ -28,9 +30,6 @@ const normalizeUserRow = (user) => ({
   passwordHash: user.password ?? user.password_hash ?? user.passwordHash,
 });
 
-// ===============================
-// ADMIN LOGIN
-// ===============================
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -38,16 +37,6 @@ const login = async (req, res) => {
     const normalizedEmail =
       typeof email === "string" ? email.trim().toLowerCase() : "";
 
-    console.log("Admin login attempt:", {
-      hasEmail: Boolean(normalizedEmail),
-      hasPassword: Boolean(password),
-    });
-    writeAuthDebug("attempt", {
-      hasEmail: Boolean(normalizedEmail),
-      hasPassword: Boolean(password),
-    });
-
-    // Validate input
     if (!normalizedEmail || !password) {
       return res.status(400).json({
         success: false,
@@ -55,17 +44,7 @@ const login = async (req, res) => {
       });
     }
 
-    // Get user from PostgreSQL
     const user = await User.getUserByEmail(normalizedEmail);
-
-    console.log("Admin login user lookup:", {
-      found: Boolean(user),
-      email: normalizedEmail,
-    });
-    writeAuthDebug("lookup", {
-      found: Boolean(user),
-      email: normalizedEmail,
-    });
 
     if (!user) {
       return res.status(401).json({
@@ -76,43 +55,23 @@ const login = async (req, res) => {
 
     const normalizedUser = normalizeUserRow(user);
 
-    console.log("Admin login normalized user:", {
-      id: normalizedUser.id,
-      role: normalizedUser.role,
-      isActive: normalizedUser.isActive,
-      hasPasswordHash: Boolean(normalizedUser.passwordHash),
-    });
-    writeAuthDebug("normalized-user", {
-      id: normalizedUser.id,
-      role: normalizedUser.role,
-      isActive: normalizedUser.isActive,
-      hasPasswordHash: Boolean(normalizedUser.passwordHash),
-    });
-
-    // Check admin role
     const allowedRoles = [
-  "admin",
-  "senior_investigator",
-  "officer",
-  "ciaboc",
-];
+      "admin",
+      "senior_investigator",
+      "officer",
+    ];
 
-if (
-  !allowedRoles.includes(
-    String(normalizedUser.role || "").toLowerCase()
-  )
-) {
-  return res.status(403).json({
-    success: false,
-    message: "Access denied",
-  });
-}
-    
+    if (
+      !allowedRoles.includes(
+        String(normalizedUser.role || "").toLowerCase()
+      )
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
 
-
-
-
-    // Check active status
     if (normalizedUser.isActive === false) {
       return res.status(403).json({
         success: false,
@@ -120,26 +79,20 @@ if (
       });
     }
 
-    if (typeof normalizedUser.passwordHash !== "string" || !normalizedUser.passwordHash) {
-      console.error("Login Error: User record is missing a password hash");
-
+    if (
+      typeof normalizedUser.passwordHash !== "string" ||
+      !normalizedUser.passwordHash
+    ) {
       return res.status(500).json({
         success: false,
         message: "Login failed",
       });
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, normalizedUser.passwordHash);
-
-    console.log("Admin login password check:", {
-      email: normalizedEmail,
-      valid: isValidPassword,
-    });
-    writeAuthDebug("password-check", {
-      email: normalizedEmail,
-      valid: isValidPassword,
-    });
+    const isValidPassword = await bcrypt.compare(
+      password,
+      normalizedUser.passwordHash
+    );
 
     if (!isValidPassword) {
       return res.status(401).json({
@@ -148,7 +101,6 @@ if (
       });
     }
 
-    // Generate JWT
     const token = jwt.sign(
       {
         userId: normalizedUser.id,
@@ -159,22 +111,26 @@ if (
       { expiresIn: "8h" }
     );
 
-    // Update last login (PostgreSQL) without blocking authentication
     try {
       await User.updateLastLogin(normalizedUser.id);
     } catch (lastLoginError) {
-      console.warn("Failed to update last login:", {
-        message: lastLoginError.message,
-        code: lastLoginError.code,
-      });
-      writeAuthDebug("last-login-failed", {
-        message: lastLoginError.message,
-        code: lastLoginError.code,
-      });
+      console.warn("Failed to update last login:", lastLoginError.message);
     }
 
-    // Response
-    res.status(200).json({
+    try {
+      await AuditLog.create({
+        complaintId: null,
+        userId: normalizedUser.id,
+        action: "LOGIN",
+        details: `${normalizedUser.fullName || normalizedUser.email} logged into the admin portal`,
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"] || "",
+      });
+    } catch (auditError) {
+      console.warn("Failed to create login audit log:", auditError.message);
+    }
+
+    return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
@@ -187,12 +143,8 @@ if (
       },
     });
   } catch (error) {
-    console.error("Login Error:", {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      stack: error.stack,
-    });
+    console.error("Login Error:", error.message);
+
     writeAuthDebug("login-error", {
       name: error.name,
       message: error.message,
@@ -200,17 +152,16 @@ if (
       stack: error.stack,
     });
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Login failed",
-      ...(process.env.NODE_ENV !== "production" ? { error: error.message } : {}),
+      ...(process.env.NODE_ENV !== "production"
+        ? { error: error.message }
+        : {}),
     });
   }
 };
 
-// ===============================
-// GET CURRENT USER
-// ===============================
 const getCurrentUser = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -226,7 +177,7 @@ const getCurrentUser = async (req, res) => {
 
     const normalizedUser = normalizeUserRow(user);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       user: {
         id: normalizedUser.id,
@@ -238,9 +189,9 @@ const getCurrentUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get Current User Error:", error);
+    console.error("Get Current User Error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch user",
     });

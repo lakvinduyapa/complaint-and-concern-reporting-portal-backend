@@ -5,28 +5,22 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 
-// DB connection
-const { connectDB } = require("./config/db");
+//crash protection
+process.on("uncaughtException", (error) => {
+  console.error("UNCAUGHT EXCEPTION:", error);
+});
 
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+
+// Load environment variables
 dotenv.config();
 
+// DB connection
+const pool = require("./config/db");
+
 const app = express();
-
-// ========================================
-// DATABASE CONNECTION
-// ========================================
-connectDB()
-  .then(() => {
-    const PORT = process.env.PORT || 5000;
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error("Failed to start server:", error);
-    process.exit(1);
-  });
 
 // ========================================
 // SECURITY MIDDLEWARE
@@ -44,10 +38,6 @@ app.use(limiter);
 // ========================================
 // CORS CONFIG
 // ========================================
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
-  : ["http://localhost:5173", "http://127.0.0.1:5173"];
-
 app.use(
   cors({
     origin: true,
@@ -82,10 +72,8 @@ app.get("/", (req, res) => {
 });
 
 // ========================================
-// ROUTES
+// ADMIN ROUTES
 // ========================================
-
-// Admin
 app.use("/api/admin/auth", require("./routes/admin/authRoutes"));
 app.use("/api/admin/dashboard", require("./routes/admin/dashboardRoutes"));
 app.use("/api/admin/complaints", require("./routes/admin/complaintRoutes"));
@@ -93,7 +81,9 @@ app.use("/api/admin/status", require("./routes/admin/statusRoutes"));
 app.use("/api/admin/audit", require("./routes/admin/auditRoutes"));
 app.use("/api/admin/reports", require("./routes/admin/reportRoutes"));
 
-// Public
+// ========================================
+// PUBLIC ROUTES
+// ========================================
 app.use("/api/public/complaints", require("./routes/public/complaintRoutes"));
 app.use("/api/public/tracking", require("./routes/public/trackingRoutes"));
 app.use("/api/public/evidence", require("./routes/public/evidenceRoutes"));
@@ -119,3 +109,23 @@ app.use((err, req, res, next) => {
     message: "Internal Server Error",
   });
 });
+
+// ========================================
+// START SERVER AFTER DB CONNECTION
+// ========================================
+const PORT = process.env.PORT || 5000;
+
+const startServer = async () => {
+  try {
+    await pool.connectDB();
+
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error.message);
+    process.exit(1);
+  }
+};
+
+startServer();

@@ -7,7 +7,7 @@ const resetDatabase = async () => {
     console.log("Resetting database...");
 
     await pool.query(`
-      DROP SCHEMA public CASCADE;
+      DROP SCHEMA IF EXISTS public CASCADE;
       CREATE SCHEMA public;
 
       CREATE TABLE users (
@@ -15,7 +15,7 @@ const resetDatabase = async () => {
         full_name VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        role VARCHAR(100) NOT NULL DEFAULT 'IAU Officer',
+        role VARCHAR(100) NOT NULL DEFAULT 'officer',
         department VARCHAR(255) DEFAULT 'Internal Audit Unit',
         is_active BOOLEAN DEFAULT TRUE,
         last_login TIMESTAMP,
@@ -88,7 +88,7 @@ const resetDatabase = async () => {
         complaint_id INTEGER REFERENCES complaints(id) ON DELETE CASCADE,
         status VARCHAR(100) NOT NULL,
         note TEXT,
-        updated_by VARCHAR(255),
+        updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -97,7 +97,7 @@ const resetDatabase = async () => {
         id SERIAL PRIMARY KEY,
         complaint_id INTEGER REFERENCES complaints(id) ON DELETE CASCADE,
         note TEXT NOT NULL,
-        added_by VARCHAR(255) NOT NULL,
+        added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         is_confidential BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -132,10 +132,21 @@ const resetDatabase = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE INDEX idx_users_role ON users(role);
+      CREATE INDEX idx_users_email ON users(email);
+      CREATE INDEX idx_complaints_status ON complaints(current_status);
+      CREATE INDEX idx_complaints_assigned_to ON complaints(assigned_to);
+      CREATE INDEX idx_complaints_created_at ON complaints(created_at);
+      CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+      CREATE INDEX idx_audit_logs_complaint_id ON audit_logs(complaint_id);
+      CREATE INDEX idx_audit_logs_action ON audit_logs(action);
+      CREATE INDEX idx_audit_logs_performed_at ON audit_logs(performed_at);
     `);
 
     console.log("Database reset successfully.");
     console.log("All tables created successfully.");
+    console.log("Audit Logs table created successfully.");
 
     process.exit(0);
   } catch (error) {
