@@ -568,3 +568,11 @@
 2026-06-03T03:56:41.129Z lookup {"found":true,"email":"senior@iau.com"}
 2026-06-03T03:56:41.134Z normalized-user {"id":2,"role":"senior_investigator","isActive":true,"hasPasswordHash":true}
 2026-06-03T03:56:41.456Z password-check {"email":"senior@iau.com","valid":true}
+2026-06-04T09:10:20.046Z attempt {"hasEmail":true,"hasPassword":true}
+2026-06-04T09:10:20.085Z lookup {"found":true,"email":"admin@iau.com"}
+2026-06-04T09:10:20.086Z normalized-user {"id":1,"role":"Admin","isActive":true,"hasPasswordHash":true}
+2026-06-04T09:10:20.162Z password-check {"email":"admin@iau.com","valid":true}
+2026-06-04T10:57:22.958Z attempt {"hasEmail":true,"hasPassword":true}
+2026-06-04T10:57:22.994Z lookup {"found":true,"email":"senior@iau.com"}
+2026-06-04T10:57:22.995Z normalized-user {"id":3,"role":"senior_investigator","isActive":true,"hasPasswordHash":true}
+2026-06-04T10:57:23.072Z password-check {"email":"senior@iau.com","valid":true}

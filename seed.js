@@ -1,42 +1,69 @@
+require("dotenv").config();
+
 const bcrypt = require("bcryptjs");
-const dotenv = require("dotenv");
-
-dotenv.config();
-
 const User = require("./queries/userQueries");
 
-const seedAdminUser = async () => {
+const seedUsers = async () => {
   try {
-    // Check if admin already exists
-    const existingAdmin = await User.getUserByEmail("admin@iau.com");
+    const users = [
+      {
+        fullName: "System Administrator",
+        email: "admin@iau.com",
+        password: "Admin@123",
+        role: "admin",
+        department: "Internal Affairs Unit",
+      },
+      {
+        fullName: "Investigation Officer",
+        email: "officer@iau.com",
+        password: "Officer@123",
+        role: "officer",
+        department: "Internal Affairs Unit",
+      },
+      {
+        fullName: "Senior Investigator",
+        email: "senior@iau.com",
+        password: "Senior@123",
+        role: "senior_investigator",
+        department: "Internal Affairs Unit",
+      },
+    ];
 
-    if (existingAdmin) {
-      console.log(" Admin user already exists");
-      process.exit(0);
+    for (const user of users) {
+      const existingUser = await User.getUserByEmail(user.email);
+
+      if (existingUser) {
+        console.log("User already exists: " + user.email);
+        continue;
+      }
+
+      const hashedPassword = await bcrypt.hash(user.password, 10);
+
+      await User.createUser({
+        fullName: user.fullName,
+        email: user.email,
+        password: hashedPassword,
+        role: user.role,
+        department: user.department,
+      });
+
+      console.log("Created user: " + user.email);
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash("Admin@123", 10);
-
-    // Create admin user
-    await User.createUser({
-      fullName: "Admin User",
-      email: "admin@iau.com",
-      password: hashedPassword,
-      role: "Admin",
-      department: "Internal Audit Unit"
-    });
-
-    console.log("Admin user created successfully");
-    console.log("Email: admin@iau.com");
-    console.log("Password: Admin@123");
-    console.log("Change this password after first login!");
+    console.log("");
+    console.log("LOGIN ACCOUNTS");
+    console.log("-----------------------------");
+    console.log("Admin: admin@iau.com / Admin@123");
+    console.log("Officer: officer@iau.com / Officer@123");
+    console.log("Senior Investigator: senior@iau.com / Senior@123");
+    console.log("-----------------------------");
+    console.log("Seed completed successfully.");
 
     process.exit(0);
   } catch (error) {
-    console.error(" Seed Error:", error.message);
+    console.error("Seed Error:", error.message);
     process.exit(1);
   }
 };
 
-seedAdminUser();
+seedUsers();
