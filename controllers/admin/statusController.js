@@ -11,9 +11,6 @@ const VALID_STATUSES = [
   "Closed",
 ];
 
-// ========================================
-// Get Status Options
-// ========================================
 const getStatusOptions = async (req, res) => {
   return res.status(200).json({
     success: true,
@@ -21,37 +18,14 @@ const getStatusOptions = async (req, res) => {
   });
 };
 
-// ========================================
-// Auto Escalation Logic
-// ========================================
-const shouldAutoEscalate = (complaint) => {
-  const escalationCategories = [
-    "bribery",
-    "corruption",
-    "fraud",
-    "financial misconduct",
-    "procurement irregularity",
-  ];
-
-  if (escalationCategories.includes(String(complaint.category || "").toLowerCase())) {
-    return {
-      shouldEscalate: true,
-      reason: `Category "${complaint.category}" requires automatic escalation`,
-    };
-  }
-
-  return { shouldEscalate: false };
-};
-
-// ========================================
-// UPDATE STATUS
-// ========================================
 const updateComplaintStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, note, escalate = false, escalationReason = "" } = req.body;
 
-    const adminUserId = req.user?.userId || null;
+    const userId = req.user?.userId || null;
+    const userRole = req.user?.role || "user";
+    const userEmail = req.user?.email || "Unknown User";
 
     if (!VALID_STATUSES.includes(status)) {
       return res.status(400).json({
@@ -70,26 +44,21 @@ const updateComplaintStatus = async (req, res) => {
     }
 
     const previousStatus = complaint.current_status;
+
     let finalStatus = status;
-
-    const autoEscalateCheck = shouldAutoEscalate(complaint);
-
     let escalationFlag = false;
     let escalationText = null;
 
-    if (
-      escalate ||
-      status === "Escalated to CIABOC" ||
-      autoEscalateCheck.shouldEscalate
-    ) {
+    // No automatic escalation by category.
+    // Escalation only happens if user manually checks escalate
+    // or selects "Escalated to CIABOC".
+    if (escalate === true || status === "Escalated to CIABOC") {
       escalationFlag = true;
+      finalStatus = "Escalated to CIABOC";
       escalationText =
         escalationReason ||
-        autoEscalateCheck.reason ||
         note ||
-        "Escalated by admin";
-
-      finalStatus = "Escalated to CIABOC";
+        `Escalated by ${userRole}`;
     }
 
     await Complaint.updateStatus(id, {
@@ -98,27 +67,27 @@ const updateComplaintStatus = async (req, res) => {
       ciaboc_escalation: escalationFlag,
       escalation_reason: escalationText,
       escalation_date: escalationFlag ? new Date() : null,
-      escalation_approved_by: escalationFlag ? adminUserId : null,
+      escalation_approved_by: escalationFlag ? userId : null,
       updated_at: new Date(),
     });
 
     await Complaint.addStatusHistory({
       complaint_id: id,
       status: finalStatus,
-      note: note || "Status updated by admin",
-      updated_by: adminUserId,
+      note: note || `Status updated by ${userRole}`,
+      updated_by: userId,
     });
 
     if (note) {
       await Complaint.addInvestigationNote({
         complaint_id: id,
         note,
-        added_by: adminUserId,
+        added_by: userId,
         is_confidential: true,
       });
     }
 
-    if (status === "Under Investigation") {
+    if (finalStatus === "Under Investigation") {
       await Complaint.updateInvestigationTimeline(id, {
         investigation_start_date: new Date(),
         expected_completion_date: new Date(
@@ -129,12 +98,12 @@ const updateComplaintStatus = async (req, res) => {
 
     await AuditLog.create({
       complaintId: id,
-      userId: adminUserId,
+      userId,
       action:
         finalStatus === "Escalated to CIABOC"
           ? "ESCALATE_CASE"
           : "UPDATE_STATUS",
-      details: `Status changed from ${previousStatus} to ${finalStatus}. Note: ${
+      details: `Status changed from ${previousStatus} to ${finalStatus} by ${userRole} (${userEmail}). Note: ${
         note || "No note provided"
       }`,
       ipAddress: req.ip,
@@ -150,7 +119,7 @@ const updateComplaintStatus = async (req, res) => {
         currentStatus: finalStatus,
         escalationRequired: escalationFlag,
         escalationReason: escalationText,
-        autoEscalated: autoEscalateCheck.shouldEscalate,
+        autoEscalated: false,
       },
     });
   } catch (error) {
@@ -164,20 +133,21 @@ const updateComplaintStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update complaint status",
-      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+      error:
+        process.env.NODE_ENV !== "production"
+          ? error.message
+          : undefined,
     });
   }
 };
 
-// ========================================
-// Add Investigation Note
-// ========================================
 const addInvestigationNote = async (req, res) => {
   try {
     const { id } = req.params;
     const { note, isConfidential = true } = req.body;
 
-    const adminUserId = req.user?.userId || null;
+    const userId = req.user?.userId || null;
+    const userRole = req.user?.role || "user";
 
     if (!note?.trim()) {
       return res.status(400).json({
@@ -198,15 +168,15 @@ const addInvestigationNote = async (req, res) => {
     await Complaint.addInvestigationNote({
       complaint_id: id,
       note: note.trim(),
-      added_by: adminUserId,
+      added_by: userId,
       is_confidential: isConfidential,
     });
 
     await AuditLog.create({
       complaintId: id,
-      userId: adminUserId,
+      userId,
       action: "ADD_INVESTIGATION_NOTE",
-      details: "Investigation note added",
+      details: `Investigation note added by ${userRole}`,
       ipAddress: req.ip,
       userAgent: req.headers["user-agent"] || "",
     });
@@ -226,14 +196,14 @@ const addInvestigationNote = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to add note",
-      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+      error:
+        process.env.NODE_ENV !== "production"
+          ? error.message
+          : undefined,
     });
   }
 };
 
-// ========================================
-// Get Investigation Notes
-// ========================================
 const getInvestigationNotes = async (req, res) => {
   try {
     const { id } = req.params;
@@ -258,7 +228,10 @@ const getInvestigationNotes = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch notes",
-      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+      error:
+        process.env.NODE_ENV !== "production"
+          ? error.message
+          : undefined,
     });
   }
 };
