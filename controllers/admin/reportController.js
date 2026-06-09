@@ -2,9 +2,9 @@ const Complaint = require("../../queries/complaintQueries");
 const ExcelJS = require("exceljs");
 
 // ======================================
-// HELPER: GET START DATE BY PERIOD
+// HELPER: GET DATE RANGE FROM PERIOD
 // ======================================
-const getStartDateByPeriod = (period) => {
+const getDateRangeFromPeriod = (period) => {
   const now = new Date();
   const startDate = new Date();
 
@@ -24,92 +24,48 @@ const getStartDateByPeriod = (period) => {
     default:
       startDate.setDate(now.getDate() - 7);
   }
-
-  return { startDate, now };
+  return { startDate, endDate: now };
 };
 
+// ======================================
+// HELPER: FILTER COMPLAINTS BY USER ROLE
+// ======================================
 const filterComplaintsByRole = (complaints, user) => {
   const userRole = user?.role;
   const userId = user?.userId;
 
   if (userRole === "officer") {
-    return complaints.filter(
-      (c) => Number(c.assigned_to) === Number(userId)
-    );
+    return complaints.filter((c) => Number(c.assigned_to) === Number(userId));
   }
-
   if (userRole === "ciaboc") {
     return complaints.filter(
-      (c) =>
-        c.ciaboc_escalation === true ||
-        c.current_status === "Escalated to CIABOC"
+      (c) => c.ciaboc_escalation === true || c.current_status === "Escalated to CIABOC"
     );
   }
-
   return complaints;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ======================================
 // HELPER: BUILD REPORT SUMMARY
 // ======================================
 const buildReportSummary = (complaints) => {
   const totalComplaints = complaints.length;
-
-  const submitted = complaints.filter(
-    (c) => c.current_status === "Submitted"
-  ).length;
-
-  const preliminaryReview = complaints.filter(
-    (c) => c.current_status === "Preliminary Review"
-  ).length;
-
-  const underInvestigation = complaints.filter(
-    (c) => c.current_status === "Under Investigation"
-  ).length;
-
-  const awaitingEvidence = complaints.filter(
-    (c) => c.current_status === "Awaiting Evidence"
-  ).length;
-
+  const submitted = complaints.filter((c) => c.current_status === "Submitted").length;
+  const preliminaryReview = complaints.filter((c) => c.current_status === "Preliminary Review").length;
+  const underInvestigation = complaints.filter((c) => c.current_status === "Under Investigation").length;
+  const awaitingEvidence = complaints.filter((c) => c.current_status === "Awaiting Evidence").length;
   const escalated = complaints.filter(
     (c) =>
       c.current_status === "Escalated to CIABOC" ||
       c.escalation_required === true ||
       c.ciaboc_escalation === true
   ).length;
-
-  const resolved = complaints.filter(
-    (c) => c.current_status === "Resolved"
-  ).length;
-
-  const closed = complaints.filter(
-    (c) => c.current_status === "Closed"
-  ).length;
-
-  const anonymousComplaints = complaints.filter(
-    (c) => c.is_anonymous === true
-  ).length;
-
-  const namedComplaints = complaints.filter(
-    (c) => c.is_anonymous === false
-  ).length;
-
+  const resolved = complaints.filter((c) => c.current_status === "Resolved").length;
+  const closed = complaints.filter((c) => c.current_status === "Closed").length;
+  const anonymousComplaints = complaints.filter((c) => c.is_anonymous === true).length;
+  const namedComplaints = complaints.filter((c) => c.is_anonymous === false).length;
   const totalEvidence = complaints.reduce(
-    (sum, complaint) =>
-      sum + Number(complaint.actual_evidence_count || 0),
+    (sum, complaint) => sum + Number(complaint.actual_evidence_count || 0),
     0
   );
 
@@ -133,22 +89,32 @@ const buildReportSummary = (complaints) => {
 // ======================================
 const getReport = async (req, res) => {
   try {
-    const period = req.query.period || "weekly";
-    const { startDate, now } = getStartDateByPeriod(period);
+    const { period, startDate, endDate } = req.query;
+
+    let start, end;
+    // 1. Custom date range takes priority
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+      // Set end to end of day to include full date
+      end.setHours(23, 59, 59, 999);
+    } 
+    // 2. Otherwise use period
+    else {
+      const range = getDateRangeFromPeriod(period || "weekly");
+      start = range.startDate;
+      end = range.endDate;
+    }
 
     const allComplaints = await Complaint.getAllComplaints();
-const roleBasedComplaints = filterComplaintsByRole(allComplaints, req.user);
+    const roleBasedComplaints = filterComplaintsByRole(allComplaints, req.user);
 
-const complaints = roleBasedComplaints.filter((c) => {
-
-
-
+    const complaints = roleBasedComplaints.filter((c) => {
       const created = new Date(c.created_at);
-      return created >= startDate && created <= now;
+      return created >= start && created <= end;
     });
 
     const summary = buildReportSummary(complaints);
-
     const statusAnalytics = [
       { name: "Submitted", value: summary.submitted },
       { name: "Preliminary Review", value: summary.preliminaryReview },
@@ -160,12 +126,10 @@ const complaints = roleBasedComplaints.filter((c) => {
     ];
 
     const categoryMap = {};
-
     complaints.forEach((c) => {
       const category = c.category || "Other";
       categoryMap[category] = (categoryMap[category] || 0) + 1;
     });
-
     const categoryAnalytics = Object.keys(categoryMap).map((cat) => ({
       name: cat,
       value: categoryMap[cat],
@@ -179,13 +143,7 @@ const complaints = roleBasedComplaints.filter((c) => {
       complaints,
     });
   } catch (error) {
-    console.error("Report Error:", {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      stack: error.stack,
-    });
-
+    console.error("Report Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to generate report",
@@ -199,19 +157,25 @@ const complaints = roleBasedComplaints.filter((c) => {
 // ======================================
 const exportExcelReport = async (req, res) => {
   try {
-    const period = req.query.period || "weekly";
-    const safePeriod = String(period).replace(/[^a-zA-Z0-9_-]/g, "");
+    const { period, startDate, endDate } = req.query;
 
-    const { startDate, now } = getStartDateByPeriod(period);
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      const range = getDateRangeFromPeriod(period || "weekly");
+      start = range.startDate;
+      end = range.endDate;
+    }
 
     const allComplaints = await Complaint.getAllComplaints();
-const roleBasedComplaints = filterComplaintsByRole(allComplaints, req.user);
+    const roleBasedComplaints = filterComplaintsByRole(allComplaints, req.user);
 
-const complaints = roleBasedComplaints.filter((c) => {
-
-
+    const complaints = roleBasedComplaints.filter((c) => {
       const created = new Date(c.created_at);
-      return created >= startDate && created <= now;
+      return created >= start && created <= end;
     });
 
     const workbook = new ExcelJS.Workbook();
@@ -233,45 +197,31 @@ const complaints = roleBasedComplaints.filter((c) => {
         status: c.current_status,
         anonymous: c.is_anonymous ? "Yes" : "No",
         evidenceCount: Number(c.actual_evidence_count || 0),
-        createdAt: c.created_at
-          ? new Date(c.created_at).toLocaleString()
-          : "",
+        createdAt: c.created_at ? new Date(c.created_at).toLocaleString() : "",
       });
     });
 
-    worksheet.getRow(1).font = {
-      bold: true,
-      size: 12,
-    };
-
+    worksheet.getRow(1).font = { bold: true, size: 12 };
     worksheet.eachRow((row) => {
       row.eachCell((cell) => {
-        cell.alignment = {
-          vertical: "middle",
-        };
+        cell.alignment = { vertical: "middle" };
       });
     });
 
+    const safeLabel = startDate && endDate ? "custom" : (period || "weekly");
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
-
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=Complaint_Report_${safePeriod}.xlsx`
+      `attachment; filename=Complaint_Report_${safeLabel}.xlsx`
     );
 
     await workbook.xlsx.write(res);
     return res.end();
   } catch (error) {
-    console.error("Excel Export Error:", {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      stack: error.stack,
-    });
-
+    console.error("Excel Export Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to export Excel report",
