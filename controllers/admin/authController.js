@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 
 const User = require("../../queries/userQueries.js");
-const AuditLog = require("../../queries/auditQueries.js");
 
 const authDebugLogPath = path.join(__dirname, "..", "..", "auth-debug.log");
 
@@ -55,16 +54,10 @@ const login = async (req, res) => {
 
     const normalizedUser = normalizeUserRow(user);
 
-    const allowedRoles = [
-      "admin",
-      "senior_investigator",
-      "officer",
-    ];
+    const allowedRoles = ["admin", "senior_investigator", "officer"];
 
     if (
-      !allowedRoles.includes(
-        String(normalizedUser.role || "").toLowerCase()
-      )
+      !allowedRoles.includes(String(normalizedUser.role || "").toLowerCase())
     ) {
       return res.status(403).json({
         success: false,
@@ -117,19 +110,6 @@ const login = async (req, res) => {
       console.warn("Failed to update last login:", lastLoginError.message);
     }
 
-    try {
-      await AuditLog.create({
-        complaintId: null,
-        userId: normalizedUser.id,
-        action: "LOGIN",
-        details: `${normalizedUser.fullName || normalizedUser.email} logged into the admin portal`,
-        ipAddress: req.ip,
-        userAgent: req.headers["user-agent"] || "",
-      });
-    } catch (auditError) {
-      console.warn("Failed to create login audit log:", auditError.message);
-    }
-
     return res.status(200).json({
       success: true,
       message: "Login successful",
@@ -155,9 +135,7 @@ const login = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Login failed",
-      ...(process.env.NODE_ENV !== "production"
-        ? { error: error.message }
-        : {}),
+      ...(process.env.NODE_ENV !== "production" ? { error: error.message } : {}),
     });
   }
 };
