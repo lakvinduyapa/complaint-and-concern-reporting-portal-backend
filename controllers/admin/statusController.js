@@ -21,7 +21,7 @@ const getStatusOptions = async (req, res) => {
 const updateComplaintStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, note, escalate = false, escalationReason = "" } = req.body;
+    const { status, note } = req.body;
 
     const userId = req.user?.userId || null;
     const userRole = req.user?.role || "user";
@@ -45,29 +45,10 @@ const updateComplaintStatus = async (req, res) => {
 
     const previousStatus = complaint.current_status;
 
-    let finalStatus = status;
-    let escalationFlag = false;
-    let escalationText = null;
-
-    // No automatic escalation by category.
-    // Escalation only happens if user manually checks escalate
-    // or selects "Escalated to CIABOC".
-    if (escalate === true || status === "Escalated to CIABOC") {
-      escalationFlag = true;
-      finalStatus = "Escalated to CIABOC";
-      escalationText =
-        escalationReason ||
-        note ||
-        `Escalated by ${userRole}`;
-    }
+    const finalStatus = status;
 
     await Complaint.updateStatus(id, {
       current_status: finalStatus,
-      escalation_required: escalationFlag,
-      ciaboc_escalation: escalationFlag,
-      escalation_reason: escalationText,
-      escalation_date: escalationFlag ? new Date() : null,
-      escalation_approved_by: escalationFlag ? userId : null,
       updated_at: new Date(),
     });
 
@@ -99,10 +80,7 @@ const updateComplaintStatus = async (req, res) => {
     await AuditLog.create({
       complaintId: id,
       userId,
-      action:
-        finalStatus === "Escalated to CIABOC"
-          ? "ESCALATE_CASE"
-          : "UPDATE_STATUS",
+      action: "UPDATE_STATUS",
       details: `Status changed from ${previousStatus} to ${finalStatus} by ${userRole} (${userEmail}). Note: ${
         note || "No note provided"
       }`,
@@ -117,9 +95,6 @@ const updateComplaintStatus = async (req, res) => {
         complaintId: id,
         previousStatus,
         currentStatus: finalStatus,
-        escalationRequired: escalationFlag,
-        escalationReason: escalationText,
-        autoEscalated: false,
       },
     });
   } catch (error) {

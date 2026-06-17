@@ -181,10 +181,21 @@ const getComplaintById = async (req, res) => {
       `
       SELECT
         c.*,
+        r.submission_type AS reporter_submission_type,
+        r.reporter_category AS reporter_category,
+        r.full_name AS reporter_full_name_detail,
+        r.employee_id AS reporter_employee_id,
+        r.department AS reporter_department,
+        r.designation AS reporter_designation,
+        r.email AS reporter_email,
+        r.phone AS reporter_phone,
+        r.preferred_contact_method AS reporter_preferred_contact_method,
         u.full_name AS assigned_officer_name,
         u.email AS assigned_officer_email,
         u.role AS assigned_officer_role
       FROM complaints c
+      LEFT JOIN reporters r
+        ON r.complaint_id = c.id
       LEFT JOIN users u
         ON c.assigned_to = u.id
       WHERE c.id = $1
