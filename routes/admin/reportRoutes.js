@@ -1,10 +1,11 @@
+// routes/admin/reportRoutes.js
 const express = require("express");
-
 const router = express.Router();
 
 const {
   getReport,
   exportExcelReport,
+  assignOfficer,
 } = require("../../controllers/admin/reportController");
 
 const {
@@ -23,6 +24,13 @@ router.get(
   "/export-excel",
   authenticateToken,
   exportExcelReport
+);
+
+// Assign an officer to a complaint
+router.patch(
+  "/assign/:id",
+  authenticateToken,
+  assignOfficer
 );
 
 module.exports = router;

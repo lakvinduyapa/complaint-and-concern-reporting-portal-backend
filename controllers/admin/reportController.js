@@ -1,4 +1,6 @@
+// controllers/admin/reportController.js
 const Complaint = require("../../queries/complaintQueries");
+const User = require("../../queries/userQueries"); // changed to userQueries (not model)
 const ExcelJS = require("exceljs");
 
 // ======================================
@@ -92,15 +94,11 @@ const getReport = async (req, res) => {
     const { period, startDate, endDate } = req.query;
 
     let start, end;
-    // 1. Custom date range takes priority
     if (startDate && endDate) {
       start = new Date(startDate);
       end = new Date(endDate);
-      // Set end to end of day to include full date
       end.setHours(23, 59, 59, 999);
-    } 
-    // 2. Otherwise use period
-    else {
+    } else {
       const range = getDateRangeFromPeriod(period || "weekly");
       start = range.startDate;
       end = range.endDate;
@@ -114,6 +112,7 @@ const getReport = async (req, res) => {
       return created >= start && created <= end;
     });
 
+    // Build summary
     const summary = buildReportSummary(complaints);
     const statusAnalytics = [
       { name: "Submitted", value: summary.submitted },
@@ -135,18 +134,102 @@ const getReport = async (req, res) => {
       value: categoryMap[cat],
     }));
 
+    // No need to fetch officers separately; use assigned_officer_name from query.
+    // Map complaints to include assignedToName and assignedToId
+    const complaintsWithAssignees = complaints.map((c) => ({
+      ...c,
+      assignedToName: c.assigned_officer_name || null, // already from JOIN
+      assignedToId: c.assigned_to ? String(c.assigned_to) : null,
+    }));
+
+    // Optionally, also fetch a list of officers for the frontend (if needed)
+    // But Reports.jsx doesn't need dropdown, so we can omit or keep as empty.
+    // For consistency with earlier code, we can still provide officer list if needed,
+    // but it's not used in the read-only display.
+    // We'll fetch a simple list using userQueries (if available)
+    let officerList = [];
+    try {
+      // Assuming User.getUsersByRole exists in userQueries
+      const officers = await User.getUsersByRole("officer");
+      officerList = officers.map((o) => ({
+        id: String(o.id),
+        name: o.full_name,
+      }));
+    } catch (err) {
+      // If the method doesn't exist, just ignore
+      console.warn("Could not fetch officers for dropdown:", err.message);
+    }
+
     return res.status(200).json({
       success: true,
       summary,
       statusAnalytics,
       categoryAnalytics,
-      complaints,
+      complaints: complaintsWithAssignees,
+      officers: officerList, // optional
     });
   } catch (error) {
     console.error("Report Error:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to generate report",
+      error: process.env.NODE_ENV !== "production" ? error.message : undefined,
+    });
+  }
+};
+
+// ======================================
+// ASSIGN OFFICER TO COMPLAINT
+// ======================================
+const assignOfficer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedTo } = req.body;
+
+    // Validate officer existence using userQueries
+    if (assignedTo) {
+      const officer = await User.getUserById(assignedTo);
+      if (!officer || officer.role !== "officer") {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid officer ID or user is not an officer",
+        });
+      }
+    }
+
+    // Update the complaint's assigned_to field
+    const updatedComplaint = await Complaint.updateStatus(id, {
+      assigned_to: assignedTo || null,
+    });
+
+    if (!updatedComplaint) {
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found",
+      });
+    }
+
+    // Get officer name if assigned
+    let officerName = null;
+    if (assignedTo) {
+      const officer = await User.getUserById(assignedTo);
+      officerName = officer ? officer.full_name : null;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Officer assigned successfully",
+      data: {
+        id: updatedComplaint.id,
+        assignedTo: assignedTo || null,
+        assignedToName: officerName,
+      },
+    });
+  } catch (error) {
+    console.error("Assign Officer Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to assign officer",
       error: process.env.NODE_ENV !== "production" ? error.message : undefined,
     });
   }
@@ -185,16 +268,19 @@ const exportExcelReport = async (req, res) => {
       { header: "CRN", key: "crn", width: 25 },
       { header: "Category", key: "category", width: 30 },
       { header: "Status", key: "status", width: 30 },
+      { header: "Assigned To", key: "assignedTo", width: 25 },
       { header: "Anonymous", key: "anonymous", width: 15 },
       { header: "Evidence Count", key: "evidenceCount", width: 18 },
       { header: "Created Date", key: "createdAt", width: 22 },
     ];
 
+    // Use assigned_officer_name from complaint data
     complaints.forEach((c) => {
       worksheet.addRow({
         crn: c.crn,
         category: c.category,
         status: c.current_status,
+        assignedTo: c.assigned_officer_name || "",
         anonymous: c.is_anonymous ? "Yes" : "No",
         evidenceCount: Number(c.actual_evidence_count || 0),
         createdAt: c.created_at ? new Date(c.created_at).toLocaleString() : "",
@@ -208,7 +294,7 @@ const exportExcelReport = async (req, res) => {
       });
     });
 
-    const safeLabel = startDate && endDate ? "custom" : (period || "weekly");
+    const safeLabel = startDate && endDate ? "custom" : period || "weekly";
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -233,5 +319,5 @@ const exportExcelReport = async (req, res) => {
 module.exports = {
   getReport,
   exportExcelReport,
+  assignOfficer,
 };
-
