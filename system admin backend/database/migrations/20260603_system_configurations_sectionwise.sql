@@ -1,0 +1,2 @@
+-- Legacy migration replaced.
+-- Section-wise portal configuration is outside the current System Admin scope.

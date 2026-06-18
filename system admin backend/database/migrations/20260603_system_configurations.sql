@@ -1,0 +1,2 @@
+-- Legacy migration replaced.
+-- System administration uses generic configuration values from seed.sql.
