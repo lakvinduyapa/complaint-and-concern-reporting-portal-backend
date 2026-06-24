@@ -33,6 +33,8 @@ const limiter = rateLimit({
   message: "Too many requests from this IP. Please try again later.",
 });
 
+app.use("/uploads", express.static("uploads"));
+
 app.use(limiter);
 
 // ========================================
@@ -56,10 +58,6 @@ app.use(express.urlencoded({ extended: true }));
 // ========================================
 app.use(morgan("dev"));
 
-// ========================================
-// STATIC FILES - EVIDENCE UPLOADS
-// ========================================
-app.use("/uploads", express.static("uploads"));
 
 // ========================================
 // HEALTH CHECK
