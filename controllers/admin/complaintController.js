@@ -5,6 +5,8 @@ const isCiabocComplaint = (complaint) =>
   complaint.ciaboc_escalation === true ||
   complaint.current_status === "Escalated to CIABOC";
 
+const isInvalidDate = (date) => Number.isNaN(new Date(date).getTime());
+
 // ========================================
 // GET ALL COMPLAINTS (PAGINATED + FILTERS)
 // ========================================
@@ -19,6 +21,36 @@ const getComplaints = async (req, res) => {
 
     const search = (req.query.search || "").trim();
     const status = (req.query.status || "").trim();
+
+    // Supports both frontend names
+    const startDate = (req.query.startDate || req.query.fromDate || "").trim();
+    const endDate = (req.query.endDate || req.query.toDate || "").trim();
+
+    if (startDate && isInvalidDate(startDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid start date",
+      });
+    }
+
+    if (endDate && isInvalidDate(endDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid end date",
+      });
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      if (start > end) {
+        return res.status(400).json({
+          success: false,
+          message: "Start date cannot be after end date",
+        });
+      }
+    }
 
     let conditions = [];
     let values = [];
@@ -58,6 +90,18 @@ const getComplaints = async (req, res) => {
         (c.crn ILIKE ${searchParam}
         OR c.category ILIKE ${searchParam})
       `);
+    }
+
+    if (startDate) {
+      values.push(startDate);
+      conditions.push(`c.created_at >= $${values.length}::date`);
+    }
+
+    if (endDate) {
+      values.push(endDate);
+      conditions.push(
+        `c.created_at <= $${values.length}::date + interval '1 day' - interval '1 millisecond'`
+      );
     }
 
     const whereClause =
@@ -121,7 +165,6 @@ const getComplaints = async (req, res) => {
   }
 };
 
-
 // ========================================
 // GET UNASSIGNED COMPLAINTS
 // ========================================
@@ -161,14 +204,6 @@ const getUnassignedComplaints = async (req, res) => {
     });
   }
 };
-
-
-
-
-
-
-
-
 
 // ========================================
 // GET COMPLAINT BY ID
@@ -212,10 +247,7 @@ const getComplaintById = async (req, res) => {
       });
     }
 
-    if (
-      req.user?.role !== "ciaboc" &&
-      isCiabocComplaint(complaint)
-    ) {
+    if (req.user?.role !== "ciaboc" && isCiabocComplaint(complaint)) {
       return res.status(404).json({
         success: false,
         message: "Complaint not found",
