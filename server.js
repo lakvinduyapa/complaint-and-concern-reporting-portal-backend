@@ -5,7 +5,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
 
-//crash protection
+// Crash protection
 process.on("uncaughtException", (error) => {
   console.error("UNCAUGHT EXCEPTION:", error);
 });
@@ -27,13 +27,45 @@ const app = express();
 // ========================================
 app.use(helmet());
 
-const limiter = rateLimit({
+// ========================================
+// RATE LIMITERS
+// ========================================
+
+// Strict limiter for login/auth routes
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP. Please try again later.",
+  max: 20,
+  message: {
+    success: false,
+    message: "Too many login attempts. Please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-app.use(limiter);
+// Public API limiter
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: {
+    success: false,
+    message: "Too many requests. Please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Upload limiter
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: {
+    success: false,
+    message: "Too many upload requests. Please try again later.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ========================================
 // CORS CONFIG
@@ -74,7 +106,11 @@ app.get("/", (req, res) => {
 // ========================================
 // ADMIN ROUTES
 // ========================================
-app.use("/api/admin/auth", require("./routes/admin/authRoutes"));
+
+// Apply strict limiter only to auth/login routes
+app.use("/api/admin/auth", authLimiter, require("./routes/admin/authRoutes"));
+
+// Normal admin routes should NOT use global rate limit
 app.use("/api/admin/dashboard", require("./routes/admin/dashboardRoutes"));
 app.use("/api/admin/complaints", require("./routes/admin/complaintRoutes"));
 app.use("/api/admin/status", require("./routes/admin/statusRoutes"));
@@ -84,9 +120,24 @@ app.use("/api/admin/reports", require("./routes/admin/reportRoutes"));
 // ========================================
 // PUBLIC ROUTES
 // ========================================
-app.use("/api/public/complaints", require("./routes/public/complaintRoutes"));
-app.use("/api/public/tracking", require("./routes/public/trackingRoutes"));
-app.use("/api/public/evidence", require("./routes/public/evidenceRoutes"));
+
+app.use(
+  "/api/public/complaints",
+  publicLimiter,
+  require("./routes/public/complaintRoutes")
+);
+
+app.use(
+  "/api/public/tracking",
+  publicLimiter,
+  require("./routes/public/trackingRoutes")
+);
+
+app.use(
+  "/api/public/evidence",
+  uploadLimiter,
+  require("./routes/public/evidenceRoutes")
+);
 
 // ========================================
 // 404 HANDLER
