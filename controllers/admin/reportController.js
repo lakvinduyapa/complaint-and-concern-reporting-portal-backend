@@ -96,6 +96,29 @@ const getReport = async (req, res) => {
     if (startDate && endDate) {
       start = new Date(startDate);
       end = new Date(endDate);
+
+      // ---------- NEW: backend safety checks ----------
+      const today = new Date();
+      // Compare date objects (time is 00:00:00 for start, end has time from input)
+      // For future check we compare against today (start of day). Since end may have time,
+      // we ensure we compare date part. Actually we want to reject if start or end is after today.
+      // We'll set today to start of day to be safe.
+      today.setHours(0, 0, 0, 0);
+
+      if (start > today || end > today) {
+        return res.status(400).json({
+          success: false,
+          message: "Future dates are not allowed",
+        });
+      }
+
+      if (start > end) {
+        return res.status(400).json({
+          success: false,
+          message: "From date cannot be after To date",
+        });
+      }
+
       // Set end to end of day to include full date
       end.setHours(23, 59, 59, 999);
     } 
@@ -234,4 +257,3 @@ module.exports = {
   getReport,
   exportExcelReport,
 };
-
