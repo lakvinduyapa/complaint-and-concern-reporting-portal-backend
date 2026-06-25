@@ -85,40 +85,64 @@ const buildReportSummary = (complaints) => {
 };
 
 // ======================================
+// HELPER: VALIDATE DATES (not future, not invalid range)
+// ======================================
+const validateDates = (startDate, endDate) => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0); // start of today for comparison
+
+  if (startDate) {
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    if (start > now) {
+      throw new Error("Start date cannot be in the future.");
+    }
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+    if (end > now) {
+      throw new Error("End date cannot be in the future.");
+    }
+  }
+
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    if (start > end) {
+      throw new Error("Start date cannot be after end date.");
+    }
+  }
+};
+
+// ======================================
 // GET REPORT DATA
 // ======================================
 const getReport = async (req, res) => {
   try {
     const { period, startDate, endDate } = req.query;
 
+    // ---- DATE VALIDATION ----
+    if (startDate && endDate) {
+      validateDates(startDate, endDate);
+    }
+    // If only one is provided, validate that one (frontend should prevent, but we double‑check)
+    if (startDate && !endDate) {
+      validateDates(startDate, null);
+    }
+    if (!startDate && endDate) {
+      validateDates(null, endDate);
+    }
+    // -------------------------
+
     let start, end;
     // 1. Custom date range takes priority
     if (startDate && endDate) {
       start = new Date(startDate);
       end = new Date(endDate);
-
-      // ---------- NEW: backend safety checks ----------
-      const today = new Date();
-      // Compare date objects (time is 00:00:00 for start, end has time from input)
-      // For future check we compare against today (start of day). Since end may have time,
-      // we ensure we compare date part. Actually we want to reject if start or end is after today.
-      // We'll set today to start of day to be safe.
-      today.setHours(0, 0, 0, 0);
-
-      if (start > today || end > today) {
-        return res.status(400).json({
-          success: false,
-          message: "Future dates are not allowed",
-        });
-      }
-
-      if (start > end) {
-        return res.status(400).json({
-          success: false,
-          message: "From date cannot be after To date",
-        });
-      }
-
       // Set end to end of day to include full date
       end.setHours(23, 59, 59, 999);
     } 
@@ -167,6 +191,13 @@ const getReport = async (req, res) => {
     });
   } catch (error) {
     console.error("Report Error:", error);
+    // Return validation errors as 400
+    if (error.message.includes("Start date") || error.message.includes("End date")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
     return res.status(500).json({
       success: false,
       message: "Failed to generate report",
@@ -181,6 +212,18 @@ const getReport = async (req, res) => {
 const exportExcelReport = async (req, res) => {
   try {
     const { period, startDate, endDate } = req.query;
+
+    // ---- DATE VALIDATION ----
+    if (startDate && endDate) {
+      validateDates(startDate, endDate);
+    }
+    if (startDate && !endDate) {
+      validateDates(startDate, null);
+    }
+    if (!startDate && endDate) {
+      validateDates(null, endDate);
+    }
+    // -------------------------
 
     let start, end;
     if (startDate && endDate) {
@@ -245,6 +288,12 @@ const exportExcelReport = async (req, res) => {
     return res.end();
   } catch (error) {
     console.error("Excel Export Error:", error);
+    if (error.message.includes("Start date") || error.message.includes("End date")) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
     return res.status(500).json({
       success: false,
       message: "Failed to export Excel report",
